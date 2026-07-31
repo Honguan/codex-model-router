@@ -13,6 +13,17 @@ Workflow filename: release.yml
 Environment: leave empty unless the workflow is updated to use one
 ```
 
+The same relationship can be configured by an authenticated maintainer with npm 11.15.0 or newer:
+
+```sh
+npm trust github codex-model-router \
+  --repo Honguan/codex-model-router \
+  --file release.yml \
+  --allow-publish \
+  --yes
+npm trust list codex-model-router
+```
+
 The workflow uses only `contents: write` and `id-token: write`, does not read `NPM_TOKEN`, and publishes with provenance. Remove the old `NPM_TOKEN` repository secret after one Trusted Publishing release succeeds.
 
 ## Release checklist

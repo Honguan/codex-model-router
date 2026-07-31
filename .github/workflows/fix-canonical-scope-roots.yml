@@ -1,0 +1,94 @@
+name: Fix canonical scope roots
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.repository == 'Honguan/codex-model-router' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/issues-18-26-v1.2.0
+          fetch-depth: 0
+
+      - name: Canonicalize user-selected root anchors
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("lib/router-core.js")
+          text = path.read_text(encoding="utf-8")
+
+          marker = "async function assertNoIndirection(target, root, anchor, label) {"
+          helper = '''async function canonicalizeRoot(path) {
+            const absolute = resolve(path);
+            const ancestor = await nearestExistingAncestor(absolute);
+            const physicalAncestor = await realpath(ancestor);
+            return resolve(physicalAncestor, relative(ancestor, absolute));
+          }
+
+          async function canonicalizeScope(scope) {
+            return {
+              ...scope,
+              cwd: await canonicalizeRoot(scope.cwd),
+              home: await canonicalizeRoot(scope.home ?? homedir())
+            };
+          }
+
+          '''
+          if "async function canonicalizeScope(scope)" not in text:
+              if marker not in text:
+                  raise SystemExit("assertNoIndirection marker not found")
+              text = text.replace(marker, helper + marker, 1)
+
+          old = '''  const scope = {
+            cwd: options.cwd ?? process.cwd(),
+            home: options.home,
+            env: options.env ?? process.env,
+            global: parsed.flags.global
+          };
+          const location = expectedPaths(scope);
+
+          try {
+            await validateLocationSafety(location);
+          '''
+          new = '''  try {
+            const scope = await canonicalizeScope({
+              cwd: options.cwd ?? process.cwd(),
+              home: options.home,
+              env: options.env ?? process.env,
+              global: parsed.flags.global
+            });
+            const location = expectedPaths(scope);
+            await validateLocationSafety(location);
+          '''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif "const scope = await canonicalizeScope" not in text:
+              raise SystemExit("run scope block not found")
+
+          path.write_text(text, encoding="utf-8", newline="\n")
+          PY
+          npm run check
+          npm test
+          npm run test:package
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          if git diff --quiet -- lib/router-core.js; then
+            echo "Fix already applied"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/router-core.js
+          git commit -m "fix: canonicalize scope roots across platform aliases"
+          git push origin HEAD:fix/issues-18-26-v1.2.0

@@ -2,8 +2,7 @@ name: Release
 
 on:
   workflow_dispatch:
-  pull_request:
-    types: [closed]
+  push:
     branches: [main]
 
 permissions:
@@ -15,27 +14,28 @@ concurrency:
 
 jobs:
   release:
-    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
 
       - run: npm run check
       - run: npm test
       - run: npm run test:package
 
-      - id: package
+      - name: Read package metadata
+        id: package
         shell: bash
         run: |
-          echo "name=$(node -p \"require('./package.json').name\")" >> "$GITHUB_OUTPUT"
-          echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+          package_name="$(node -p 'require("./package.json").name')"
+          package_version="$(node -p 'require("./package.json").version')"
+          echo "name=${package_name}" >> "${GITHUB_OUTPUT}"
+          echo "version=${package_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Create GitHub release
         env:
@@ -48,7 +48,7 @@ jobs:
             echo "$tag already exists"
           else
             gh release create "$tag" \
-              --target main \
+              --target "${GITHUB_SHA}" \
               --title "$tag" \
               --notes-file CHANGELOG.md
           fi
@@ -62,10 +62,10 @@ jobs:
         run: |
           published="$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>/dev/null || true)"
           if [ "$published" = "$PACKAGE_VERSION" ]; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "${GITHUB_OUTPUT}"
             echo "${PACKAGE_NAME}@${PACKAGE_VERSION} already exists on npm"
           else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "publish=true" >> "${GITHUB_OUTPUT}"
           fi
 
       - name: Publish package to npm

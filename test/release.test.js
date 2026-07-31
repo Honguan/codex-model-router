@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   extractChangelogSection,
@@ -74,4 +75,15 @@ test("release context accepts only the trusted repository and exact version tag"
     refName: "v1.2.1",
     version: "1.2.0"
   }), /does not match/);
+});
+
+test("release workflow separates first publication bootstrap from Trusted Publishing", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+  assert.match(workflow, /registry-url: https:\/\/registry\.npmjs\.org/);
+  assert.match(workflow, /Bootstrap first npm publication with token and provenance/);
+  assert.match(workflow, /NODE_AUTH_TOKEN: \$\{\{ secrets\.NPM_TOKEN \}\}/);
+  assert.match(workflow, /package_exists == 'false'/);
+  assert.match(workflow, /Publish to npm with Trusted Publishing and provenance/);
+  assert.match(workflow, /package_exists == 'true'/);
+  assert.match(workflow, /NPM_TOKEN is required only for the first publication/);
 });

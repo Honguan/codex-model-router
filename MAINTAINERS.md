@@ -38,6 +38,14 @@ The workflow uses only `contents: write` and `id-token: write`, does not read `N
 8. Verify the clean public npm end-to-end step passes before the GitHub Release appears.
 9. Confirm `npm view codex-model-router version` and `npx --yes codex-model-router@<version> --version`.
 
+## Manual release retry
+
+Open **Actions → Release → Run workflow**, keep the workflow definition on `main`, and enter the exact existing version tag in the required `tag` field, for example `v1.2.0`.
+
+The branch selector chooses which workflow definition to run; it is not the release target. The workflow checks out the entered tag, verifies that its commit is reachable from `main`, validates that the tag matches `package.json`, and then resumes the idempotent npm and GitHub Release checks.
+
+Never enter a branch name in the `tag` field. Never reuse a package version that already exists on npm.
+
 ## Compatibility update checklist
 
 For every release that changes generated paths, TOML fields, models, or Codex integration:
@@ -51,4 +59,4 @@ For every release that changes generated paths, TOML fields, models, or Codex in
 
 ## Recovery
 
-A failed npm publication does not create a GitHub Release. Fix the Trusted Publisher or workflow problem, then re-run by deleting and recreating the unpublished tag only after verifying that npm does not already contain the version. Published npm versions are immutable and must never be reused.
+A failed npm publication does not create a GitHub Release. Fix the Trusted Publisher or workflow problem, then use the manual exact-tag retry above. Delete and recreate a tag only when it was never published, points to the wrong commit, and npm does not already contain that version. Published npm versions are immutable and must never be reused.

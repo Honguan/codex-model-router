@@ -17,39 +17,58 @@ From npm after publication:
 npx codex-model-router install
 ```
 
-From this repository:
+From GitHub:
 
 ```sh
-npm install
-node bin/codex-model-router.js install
+npm install -g https://github.com/Honguan/codex-model-router/archive/refs/tags/v1.1.0.tar.gz
+codex-model-router install
 ```
 
 Project scope is the default. Use `--global` only when the setup should apply to every project:
 
 ```sh
-npx codex-model-router install --global
+codex-model-router install --global
 ```
 
 A normal install preserves an existing main model. To explicitly set Terra/high and make the change reversible:
 
 ```sh
-npx codex-model-router install --set-default
+codex-model-router install --set-default
 ```
 
 Preview without writing anything:
 
 ```sh
-npx codex-model-router install --dry-run
-npx codex-model-router uninstall --dry-run
+codex-model-router install --set-default --dry-run
+codex-model-router uninstall --dry-run
 ```
+
+## What is changed
+
+Project scope manages only:
+
+```text
+.codex/config.toml
+.codex/agents/luna.toml
+.codex/agents/sol.toml
+.agents/skills/model-router/SKILL.md
+```
+
+Global scope uses `$CODEX_HOME` or `~/.codex` for Codex files and `~/.agents/skills/model-router/` for the skill.
+
+A plain install adds Terra/high only when the top-level values are absent. Existing values are preserved. `--set-default` replaces only `model` and `model_reasoning_effort`, records the exact prior values, and restores them during uninstall only when the user has not changed them afterward.
+
+Existing Luna, Sol, or skill files are never overwritten. Uninstall removes only unchanged package-owned files. Unrelated TOML settings, comments, BOM, ordering, and LF/CRLF line endings are preserved.
 
 ## Installed routing
 
-- Terra: normal questions, coding, debugging, fixes, tests, and implementation
+- Terra/high: normal questions, coding, debugging, fixes, tests, and implementation
 - Luna/high: deterministic repeated edits, bulk patterns, searches, formatting, counting, extraction, and summaries
-- Sol/medium/read-only: security, permissions, destructive actions, financial logic, SQL writes, concurrency, complex state, and explicit reviews
-- Terra applies fixes reported by Sol
+- Sol/medium/workspace-write: security-sensitive or high-regression-risk review and implementation
+- Sol normally reviews first; it may edit files when Terra explicitly delegates implementation or a confirmed fix
 - Simple questions do not spawn a subagent
+
+Users may edit model names, reasoning levels, and `sandbox_mode` directly in the generated TOML files. Later installs preserve those manual edits and `doctor` reports them as user-modified.
 
 ## Commands
 
@@ -60,65 +79,51 @@ codex-model-router doctor [--global]
 codex-model-router --version
 ```
 
-`doctor` is read-only. Exit code `0` means the managed installation is healthy; exit code `1` reports an item as missing, invalid, user-modified, overridden, or unsafe.
+`doctor` is read-only. Exit code `0` means healthy; exit code `1` reports missing, invalid, user-modified, overridden, or unsafe state.
 
-## File locations
+## npm publication
 
-Project scope:
+The package name is unscoped and public. Before the first publish, confirm the name is available and sign in:
 
-```text
-.codex/config.toml
-.codex/agents/luna.toml
-.codex/agents/sol.toml
-.agents/skills/model-router/SKILL.md
+```sh
+npm view codex-model-router
+npm login
+npm whoami
 ```
 
-Global scope:
+Review exactly what will be uploaded:
 
-```text
-$CODEX_HOME/config.toml or ~/.codex/config.toml
-$CODEX_HOME/agents/luna.toml
-$CODEX_HOME/agents/sol.toml
-~/.agents/skills/model-router/SKILL.md
+```sh
+npm run check
+npm test
+npm run test:package
+npm pack --dry-run
+npm publish --dry-run
 ```
 
-The package also stores `model-router-state.json` and, when an existing config must change, one package-owned backup next to `config.toml`.
+Publish from the package root:
 
-## Manual model changes
-
-Edit these fields directly:
-
-```toml
-# Main config
-model = "gpt-5.6-terra"
-model_reasoning_effort = "high"
-
-# luna.toml
-model = "gpt-5.6-luna"
-model_reasoning_effort = "high"
-
-# sol.toml
-model = "gpt-5.6-sol"
-model_reasoning_effort = "medium"
-sandbox_mode = "read-only"
+```sh
+npm publish
 ```
 
-A later plain install preserves manual changes. Uninstall removes only unchanged package-owned files and values. User-modified content is left in place and reported.
+npm requires account 2FA or a granular access token allowed to bypass 2FA. After publication, verify:
+
+```sh
+npm view codex-model-router version
+npx codex-model-router --version
+```
+
+For automated releases, configure npm Trusted Publishing for this GitHub repository instead of storing a long-lived npm token.
 
 ## Safety behavior
 
-- Preserves unrelated TOML content, comments, ordering, UTF-8 BOM, and LF/CRLF line endings
 - Refuses malformed or unsafe configuration before writing
-- Uses atomic file replacement and rolls back a failed multi-file operation where possible
+- Uses atomic file replacement and rolls back failed multi-file upgrades where possible
+- Stores a small package-owned state file and one backup only when an existing config is changed
 - Never modifies `AGENTS.md`, shell profiles, editor settings, hooks, MCP servers, telemetry, or environment variables
 - Dry-run creates no files, directories, backups, or temporary state
 
-## Known limits
-
-The installer only manages top-level `model` and `model_reasoning_effort`, the Luna and Sol agent files, and the router skill. Existing files at those paths are preserved rather than overwritten. Restart Codex if a newly installed skill or agent is not immediately visible.
-
-## Release process
-
-Update `package.json` and `CHANGELOG.md`, open a pull request, and merge only after the cross-platform CI matrix passes. A protected workflow verifies the package again and creates the matching GitHub release if its tag does not already exist.
+Restart Codex if newly installed agents or skills are not immediately visible.
 
 Codex references: [Subagents](https://developers.openai.com/codex/subagents), [Build skills](https://developers.openai.com/codex/build-skills), and [Configuration reference](https://developers.openai.com/codex/config-reference).

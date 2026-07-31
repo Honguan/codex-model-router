@@ -1,6 +1,9 @@
 name: Apply v1.2.0 patch
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - fix/issues-18-26-v1.2.0
@@ -17,7 +20,7 @@ concurrency:
 
 jobs:
   apply:
-    if: github.repository == 'Honguan/codex-model-router'
+    if: github.repository == 'Honguan/codex-model-router' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

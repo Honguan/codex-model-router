@@ -1,15 +1,24 @@
 # Changelog
 
+## 1.2.0 - 2026-07-31
+
+- Unify package version, defaults, and managed templates into one source of truth.
+- Install the current Sol workspace-write template directly and safely migrate known older templates.
+- Reject symbolic-link and Windows-junction path escapes before reads or writes.
+- Add scope-level process locking with conservative stale-lock recovery.
+- Add transaction journals, fault-tested rollback, and conflict-safe interrupted-operation recovery.
+- Add exact Codex compatibility and troubleshooting guidance.
+- Generate GitHub Release notes from only the current changelog entry.
+- Migrate the release workflow to npm Trusted Publishing with provenance.
+- Add actionlint and ShellCheck workflow validation.
+- Add clean post-publication end-to-end verification from the public npm registry.
+
 ## 1.1.1 - 2026-07-31
 
-- Fix Bash quoting in the npm release workflow.
-- Upgrade GitHub Actions to Node.js 24-compatible releases.
-- Publish only from version tags or an explicit manual workflow run.
-- Publish and verify the npm package before creating the GitHub Release.
-- Add release-tag and package-version consistency checks.
-- Improve npm installation, project/global scope, safety, and recovery documentation.
-- Add package discovery metadata and a private security-reporting policy.
-- Verify that the packed CLI version matches `package.json`.
+- Fix npm release workflow shell quoting.
+- Upgrade GitHub Actions to Node.js 24-compatible versions.
+- Simplify npm installation instructions.
+- Improve release reliability and documentation.
 
 ## 1.1.0 - 2026-07-31
 

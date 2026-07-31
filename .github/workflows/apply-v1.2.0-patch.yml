@@ -33,11 +33,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(find .codex-router-patch -maxdepth 1 -name 'chunk-*.txt' | wc -l)" -eq 7
-          wc -c .codex-router-patch/chunk-*.txt
-          sha1sum .codex-router-patch/chunk-*.txt
-          cat .codex-router-patch/chunk-*.txt | base64 --decode > patch.tar.gz
-          sha256sum patch.tar.gz
+          test "$(find .codex-router-patch -maxdepth 1 -name 'chunk-*.txt' | wc -l)" -eq 9
+          cat \
+            .codex-router-patch/chunk-00.txt \
+            .codex-router-patch/chunk-01.txt \
+            .codex-router-patch/chunk-02.txt \
+            .codex-router-patch/chunk-03a.txt \
+            .codex-router-patch/chunk-03b.txt \
+            .codex-router-patch/chunk-04.txt \
+            .codex-router-patch/chunk-05.txt \
+            .codex-router-patch/chunk-06.txt \
+            | base64 --decode > patch.tar.gz
+          test "$(sha256sum patch.tar.gz | cut -d ' ' -f 1)" = "81e709e54109d328ad47f7962630a5c22f2709caec004284b2f8d8148fbc0969"
           tar --extract --gzip --file patch.tar.gz
           npm run check
           npm test

@@ -47,13 +47,27 @@ jobs:
           echo '--- crash recovery scenario ---'
           rm -rf "$(dirname "$root")"
           mkdir -p "$root" "$home"
-          (cd "$root" && HOME="$home" CODEX_MODEL_ROUTER_TESTING=1 CODEX_MODEL_ROUTER_TEST_CRASH_AFTER=1 node "$GITHUB_WORKSPACE/bin/codex-model-router.js" install); echo "crash-status=$?"
+          set +e
+          (cd "$root" && HOME="$home" CODEX_MODEL_ROUTER_TESTING=1 CODEX_MODEL_ROUTER_TEST_CRASH_AFTER=1 node "$GITHUB_WORKSPACE/bin/codex-model-router.js" install)
+          crash_status=$?
+          set -e
+          echo "crash-status=$crash_status"
           echo 'journal:'
           cat "$root/.codex/model-router-transaction.json" || true
           echo 'lock:'
           cat "$root/.codex/model-router.lock" || true
+          lock_pid="$(node -e 'try{console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).pid)}catch{}' "$root/.codex/model-router.lock")"
+          [ -n "$lock_pid" ] && (ps -p "$lock_pid" -o pid=,ppid=,stat=,command= || true)
           echo 'reinstall:'
-          (cd "$root" && HOME="$home" node "$GITHUB_WORKSPACE/bin/codex-model-router.js" install); echo "reinstall-status=$?"
+          set +e
+          (cd "$root" && HOME="$home" node "$GITHUB_WORKSPACE/bin/codex-model-router.js" install)
+          reinstall_status=$?
+          set -e
+          echo "reinstall-status=$reinstall_status"
           echo 'doctor:'
-          (cd "$root" && HOME="$home" node "$GITHUB_WORKSPACE/bin/codex-model-router.js" doctor); echo "doctor-status=$?"
+          set +e
+          (cd "$root" && HOME="$home" node "$GITHUB_WORKSPACE/bin/codex-model-router.js" doctor)
+          doctor_status=$?
+          set -e
+          echo "doctor-status=$doctor_status"
           find "$(dirname "$root")" -maxdepth 7 -print

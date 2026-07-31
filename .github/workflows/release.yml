@@ -3,10 +3,7 @@ name: Release
 on:
   push:
     branches: [main]
-    paths:
-      - package.json
-      - CHANGELOG.md
-      - .github/workflows/release.yml
+  workflow_dispatch:
 
 permissions:
   contents: write

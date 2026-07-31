@@ -90,5 +90,5 @@ test("release workflow requires an explicit and isolated first-publication boots
   assert.match(workflow, /Run this exact tag manually with publish_mode=bootstrap/);
   assert.match(workflow, /Bootstrap mode is only for creating the npm package/);
   assert.equal(workflow.match(/secrets\.NPM_TOKEN/g)?.length, 1);
-  assert.equal(workflow.match(/NODE_AUTH_TOKEN:/g)?.length, 1);
+  assert.equal(workflow.match(/^\s+NODE_AUTH_TOKEN:/gm)?.length, 1);
 });

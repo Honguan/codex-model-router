@@ -10,6 +10,7 @@
 - Add exact Codex compatibility and troubleshooting guidance.
 - Generate GitHub Release notes from only the current changelog entry.
 - Migrate the release workflow to npm Trusted Publishing with provenance.
+- Require an explicit version tag for manual Release retries and verify that tag against `main`.
 - Add actionlint and ShellCheck workflow validation.
 - Add clean post-publication end-to-end verification from the public npm registry.
 

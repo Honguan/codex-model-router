@@ -77,13 +77,18 @@ test("release context accepts only the trusted repository and exact version tag"
   }), /does not match/);
 });
 
-test("release workflow separates first publication bootstrap from Trusted Publishing", async () => {
+test("release workflow requires an explicit and isolated first-publication bootstrap", async () => {
   const workflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
-  assert.match(workflow, /registry-url: https:\/\/registry\.npmjs\.org/);
+  assert.match(workflow, /publish_mode:/);
+  assert.match(workflow, /type: choice/);
+  assert.match(workflow, /- normal\n\s+- bootstrap/);
+  assert.match(workflow, /PUBLISH_MODE: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.publish_mode \|\| 'normal' \}\}/);
   assert.match(workflow, /Bootstrap first npm publication with token and provenance/);
-  assert.match(workflow, /NODE_AUTH_TOKEN: \$\{\{ secrets\.NPM_TOKEN \}\}/);
-  assert.match(workflow, /package_exists == 'false'/);
+  assert.match(workflow, /env\.PUBLISH_MODE == 'bootstrap'/);
   assert.match(workflow, /Publish to npm with Trusted Publishing and provenance/);
-  assert.match(workflow, /package_exists == 'true'/);
-  assert.match(workflow, /NPM_TOKEN is required only for the first publication/);
+  assert.match(workflow, /env\.PUBLISH_MODE == 'normal'/);
+  assert.match(workflow, /Run this exact tag manually with publish_mode=bootstrap/);
+  assert.match(workflow, /Bootstrap mode is only for creating the npm package/);
+  assert.equal(workflow.match(/secrets\.NPM_TOKEN/g)?.length, 1);
+  assert.equal(workflow.match(/NODE_AUTH_TOKEN:/g)?.length, 1);
 });

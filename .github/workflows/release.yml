@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   release:
     if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
@@ -17,15 +21,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          registry-url: https://registry.npmjs.org
+
       - run: npm run check
       - run: npm test
       - run: npm run test:package
+
       - id: package
         shell: bash
-        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "name=$(node -p \"require('./package.json').name\")" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -35,9 +46,36 @@ jobs:
           tag="v${VERSION}"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "$tag already exists"
-            exit 0
+          else
+            gh release create "$tag" \
+              --target main \
+              --title "$tag" \
+              --notes-file CHANGELOG.md
           fi
-          gh release create "$tag" \
-            --target main \
-            --title "$tag" \
-            --notes-file CHANGELOG.md
+
+      - name: Check npm version
+        id: npm
+        env:
+          PACKAGE_NAME: ${{ steps.package.outputs.name }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+        shell: bash
+        run: |
+          published="$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>/dev/null || true)"
+          if [ "$published" = "$PACKAGE_VERSION" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} already exists on npm"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish package to npm
+        if: steps.npm.outputs.publish == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::Repository secret NPM_TOKEN is not configured"
+            exit 1
+          fi
+          npm publish --access public

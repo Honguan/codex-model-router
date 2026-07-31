@@ -1,7 +1,7 @@
 {
   "name": "codex-model-router",
-  "version": "1.1.0",
-  "description": "Safely install a small Codex model-routing configuration.",
+  "version": "1.1.1",
+  "description": "Safely install Codex subagent routing for Terra, Luna, and Sol.",
   "type": "module",
   "bin": {
     "codex-model-router": "./bin/codex-model-router.js"
@@ -18,14 +18,23 @@
     "bin",
     "lib",
     "README.md",
+    "SECURITY.md",
     "LICENSE"
   ],
   "keywords": [
     "codex",
+    "codex-cli",
     "openai",
+    "model-router",
+    "subagent",
     "subagents",
-    "skills"
+    "agent-routing",
+    "skills",
+    "terra",
+    "luna",
+    "sol"
   ],
+  "author": "Honguan",
   "repository": {
     "type": "git",
     "url": "https://github.com/Honguan/codex-model-router.git"

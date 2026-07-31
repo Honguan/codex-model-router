@@ -1,13 +1,13 @@
 {
   "name": "codex-model-router",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Safely install a small Codex model-routing configuration.",
   "type": "module",
   "bin": {
     "codex-model-router": "./bin/codex-model-router.js"
   },
   "scripts": {
-    "check": "node --check bin/codex-model-router.js && node --check lib/router.js && node --check lib/toml.js",
+    "check": "node --check bin/codex-model-router.js && node --check lib/router.js && node --check lib/router-core.js && node --check lib/toml.js",
     "test": "node --test",
     "test:package": "node scripts/package-smoke.js"
   },
@@ -26,5 +26,16 @@
     "subagents",
     "skills"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Honguan/codex-model-router.git"
+  },
+  "homepage": "https://github.com/Honguan/codex-model-router#readme",
+  "bugs": {
+    "url": "https://github.com/Honguan/codex-model-router/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT"
 }

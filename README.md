@@ -81,7 +81,34 @@ codex-model-router --version
 
 `doctor` is read-only. Exit code `0` means healthy; exit code `1` reports missing, invalid, user-modified, overridden, or unsafe state.
 
-## npm publication
+## Automatic npm publication
+
+Create a GitHub Actions repository secret named `NPM_TOKEN`:
+
+```text
+Repository Settings
+→ Secrets and variables
+→ Actions
+→ New repository secret
+```
+
+Paste the npm access token as the secret value. Never place the real token in this repository or in the workflow YAML.
+
+The `Release` workflow runs after a pull request is merged into `main`, or when started manually. It:
+
+1. Runs syntax checks, tests, and the packed-package smoke test.
+2. Reads the name and version from `package.json`.
+3. Creates the matching GitHub release when missing.
+4. Checks whether that exact version already exists on npm.
+5. Publishes only a version that is not already present.
+
+Before merging a new release, update `package.json` and `CHANGELOG.md` to the new version. Merges without a version change do not republish the package.
+
+The npm token must have package read/write permission and must be permitted to publish without an interactive OTP when the account or package requires 2FA.
+
+To publish the current version after adding the secret, open `Actions → Release → Run workflow`.
+
+## Manual npm publication
 
 The package name is unscoped and public. Before the first publish, confirm the name is available and sign in:
 
@@ -107,14 +134,14 @@ Publish from the package root:
 npm publish
 ```
 
-npm requires account 2FA or a granular access token allowed to bypass 2FA. After publication, verify:
+After publication, verify:
 
 ```sh
 npm view codex-model-router version
 npx codex-model-router --version
 ```
 
-For automated releases, configure npm Trusted Publishing for this GitHub repository instead of storing a long-lived npm token.
+For maximum security, npm Trusted Publishing can replace the long-lived token later.
 
 ## Safety behavior
 

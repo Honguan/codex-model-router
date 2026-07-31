@@ -58,6 +58,7 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
+          registry-url: https://registry.npmjs.org
 
       - name: Use an OIDC-capable npm CLI
         run: npm install --global npm@11.18.0
@@ -73,22 +74,41 @@ jobs:
           RELEASE_REF_NAME: ${{ env.RELEASE_TAG }}
         run: node scripts/release-metadata.js --notes "$RUNNER_TEMP/release-notes.md"
 
-      - name: Check npm version
+      - name: Inspect npm package state
         id: npm
         env:
           PACKAGE_NAME: ${{ steps.metadata.outputs.name }}
           PACKAGE_VERSION: ${{ steps.metadata.outputs.version }}
         run: |
-          published="$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>/dev/null || true)"
-          if [ "${published}" = "${PACKAGE_VERSION}" ]; then
-            echo "publish=false" >> "${GITHUB_OUTPUT}"
-            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} already exists on npm"
-          else
-            echo "publish=true" >> "${GITHUB_OUTPUT}"
+          package_exists=false
+          existing_name="$(npm view "$PACKAGE_NAME" name 2>/dev/null || true)"
+          if [ "$existing_name" = "$PACKAGE_NAME" ]; then
+            package_exists=true
           fi
 
+          published="$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>/dev/null || true)"
+          if [ "$published" = "$PACKAGE_VERSION" ]; then
+            package_exists=true
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} already exists on npm"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "package_exists=$package_exists" >> "$GITHUB_OUTPUT"
+
+      - name: Bootstrap first npm publication with token and provenance
+        if: steps.npm.outputs.publish == 'true' && steps.npm.outputs.package_exists == 'false'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::NPM_TOKEN is required only for the first publication of this package"
+            exit 1
+          fi
+          npm publish --access public --provenance
+
       - name: Publish to npm with Trusted Publishing and provenance
-        if: steps.npm.outputs.publish == 'true'
+        if: steps.npm.outputs.publish == 'true' && steps.npm.outputs.package_exists == 'true'
         run: npm publish --access public --provenance
 
       - name: Wait for npm registry propagation
@@ -98,7 +118,7 @@ jobs:
         run: |
           for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
             published="$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>/dev/null || true)"
-            if [ "${published}" = "${PACKAGE_VERSION}" ]; then
+            if [ "$published" = "$PACKAGE_VERSION" ]; then
               echo "Verified ${PACKAGE_NAME}@${PACKAGE_VERSION} on npm"
               exit 0
             fi

@@ -33,6 +33,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ ! -d .codex-router-patch ]; then
+            echo "Patch already applied"
+            exit 0
+          fi
+          cp .github/workflows/ci.yml "${RUNNER_TEMP}/ci.yml"
+          cp .github/workflows/release.yml "${RUNNER_TEMP}/release.yml"
           test "$(find .codex-router-patch -maxdepth 1 -name 'chunk-*.txt' | wc -l)" -eq 9
           cat \
             .codex-router-patch/chunk-00.txt \
@@ -49,12 +55,18 @@ jobs:
           npm run check
           npm test
           npm run test:package
+          cp "${RUNNER_TEMP}/ci.yml" .github/workflows/ci.yml
+          cp "${RUNNER_TEMP}/release.yml" .github/workflows/release.yml
 
       - name: Commit completed implementation
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf .codex-router-patch patch.tar.gz .github/workflows/apply-v1.2.0-patch.yml
+          if [ ! -d .codex-router-patch ]; then
+            echo "Patch already applied"
+            exit 0
+          fi
+          rm -rf .codex-router-patch patch.tar.gz
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add --all

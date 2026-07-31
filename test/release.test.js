@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractChangelogSection, validateReleaseContext } from "../scripts/release-metadata.js";
+import {
+  extractChangelogSection,
+  resolveReleaseReference,
+  validateReleaseContext
+} from "../scripts/release-metadata.js";
 
 test("extracts only the current LF changelog entry", () => {
   const changelog = "# Changelog\n\n## 1.2.0 - 2026-07-31\n\n- Current.\n\n## 1.1.1 - 2026-07-30\n\n- Old.\n";
@@ -18,6 +22,25 @@ test("rejects missing, duplicate, malformed, and empty entries", () => {
   assert.throws(() => extractChangelogSection("# Changelog\n## 1.2.0\n- one\n## 1.2.0\n- two\n", "1.2.0"), /duplicate/);
   assert.throws(() => extractChangelogSection("# Changelog\n## next\n- bad\n", "1.2.0"), /malformed/);
   assert.throws(() => extractChangelogSection("# Changelog\n## 1.2.0\n## 1.1.0\n- old\n", "1.2.0"), /empty/);
+});
+
+test("explicit release reference overrides the workflow branch reference", () => {
+  assert.deepEqual(resolveReleaseReference({
+    GITHUB_REF_TYPE: "branch",
+    GITHUB_REF_NAME: "main",
+    RELEASE_REF_TYPE: "tag",
+    RELEASE_REF_NAME: "v1.2.0"
+  }), {
+    refType: "tag",
+    refName: "v1.2.0"
+  });
+  assert.deepEqual(resolveReleaseReference({
+    GITHUB_REF_TYPE: "tag",
+    GITHUB_REF_NAME: "v1.2.0"
+  }), {
+    refType: "tag",
+    refName: "v1.2.0"
+  });
 });
 
 test("release context accepts only the trusted repository and exact version tag", () => {
@@ -43,7 +66,7 @@ test("release context accepts only the trusted repository and exact version tag"
     refType: "branch",
     refName: "main",
     version: "1.2.0"
-  }), /exact tag/);
+  }), /explicit manual retry tag/);
   assert.throws(() => validateReleaseContext({
     repository: "Honguan/codex-model-router",
     eventName: "push",

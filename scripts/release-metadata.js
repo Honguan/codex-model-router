@@ -27,12 +27,19 @@ export function extractChangelogSection(content, version) {
   return `${section}\n`;
 }
 
+export function resolveReleaseReference(environment) {
+  return {
+    refType: environment.RELEASE_REF_TYPE || environment.GITHUB_REF_TYPE,
+    refName: environment.RELEASE_REF_NAME || environment.GITHUB_REF_NAME
+  };
+}
+
 export function validateReleaseContext({ repository, eventName, refType, refName, version }) {
   if (repository !== "Honguan/codex-model-router") {
     throw new Error(`release repository is not trusted: ${repository || "missing"}`);
   }
   if (!["push", "workflow_dispatch"].includes(eventName) || refType !== "tag") {
-    throw new Error("releases require a pushed version tag or a manual retry at that exact tag");
+    throw new Error("releases require a pushed version tag or an explicit manual retry tag");
   }
   const expected = `v${version}`;
   if (refName !== expected) throw new Error(`tag ${refName || "missing"} does not match package version ${version}`);
@@ -52,12 +59,13 @@ export async function loadReleaseMetadata({
   }
   const changelog = await readFile(resolve(changelogPath), "utf8");
   const notes = extractChangelogSection(changelog, packageJson.version);
+  const reference = resolveReleaseReference(environment);
   const tag = validateContext
     ? validateReleaseContext({
       repository: environment.GITHUB_REPOSITORY,
       eventName: environment.GITHUB_EVENT_NAME,
-      refType: environment.GITHUB_REF_TYPE,
-      refName: environment.GITHUB_REF_NAME,
+      refType: reference.refType,
+      refName: reference.refName,
       version: packageJson.version
     })
     : `v${packageJson.version}`;

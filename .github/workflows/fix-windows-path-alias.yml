@@ -31,73 +31,15 @@ jobs:
 
           path = Path("lib/router-core.js")
           text = path.read_text(encoding="utf-8")
-          old = '''  const rel = relative(absoluteAnchor, absoluteTarget);
-          const components = rel ? rel.split(sep) : [];
-          let current = absoluteAnchor;
-          const inspect = [current];
-          for (const component of components) {
-            current = join(current, component);
-            inspect.push(current);
-          }
-
-          for (let index = 0; index < inspect.length; index += 1) {
-            const candidate = inspect[index];
-            let info;
-            try {
-              info = await lstat(candidate);
-            } catch (error) {
-              if (error?.code === "ENOENT") break;
-              throw error;
-            }
-            if (info.isSymbolicLink()) {
-              throw new Error(`unsafe path component for ${label}: ${candidate} is a symbolic link or junction`);
-            }
-            if (index < inspect.length - 1 && !info.isDirectory()) {
-              throw new Error(`unsafe path component for ${label}: ${candidate} is not a directory`);
-            }
-            const physical = await realpath(candidate);
-            if (normalizeForCompare(physical) !== normalizeForCompare(candidate)) {
-              throw new Error(`unsafe path component for ${label}: ${candidate} resolves to ${physical}`);
-            }
-          }
-          '''
-          new = '''  const rel = relative(absoluteAnchor, absoluteTarget);
-          const components = rel ? rel.split(sep) : [];
-          const physicalAnchor = await realpath(absoluteAnchor);
-          let current = absoluteAnchor;
-          const inspect = [current];
-          for (const component of components) {
-            current = join(current, component);
-            inspect.push(current);
-          }
-
-          for (let index = 0; index < inspect.length; index += 1) {
-            const candidate = inspect[index];
-            let info;
-            try {
-              info = await lstat(candidate);
-            } catch (error) {
-              if (error?.code === "ENOENT") break;
-              throw error;
-            }
-            if (info.isSymbolicLink()) {
-              throw new Error(`unsafe path component for ${label}: ${candidate} is a symbolic link or junction`);
-            }
-            if (index < inspect.length - 1 && !info.isDirectory()) {
-              throw new Error(`unsafe path component for ${label}: ${candidate} is not a directory`);
-            }
-            const physical = await realpath(candidate);
-            const expectedPhysical = resolve(physicalAnchor, relative(absoluteAnchor, candidate));
-            if (normalizeForCompare(physical) !== normalizeForCompare(expectedPhysical)) {
-              throw new Error(`unsafe path component for ${label}: ${candidate} resolves to ${physical}`);
-            }
-          }
-          '''
-          if old not in text:
-              if "const physicalAnchor = await realpath(absoluteAnchor);" in text:
-                  raise SystemExit(0)
-              raise SystemExit("expected path validation block was not found")
-          path.write_text(text.replace(old, new), encoding="utf-8", newline="\n")
+          if "const physicalAnchor = await realpath(absoluteAnchor);" not in text:
+              first = "  const components = rel ? rel.split(sep) : [];\n  let current = absoluteAnchor;"
+              first_replacement = "  const components = rel ? rel.split(sep) : [];\n  const physicalAnchor = await realpath(absoluteAnchor);\n  let current = absoluteAnchor;"
+              second = "    const physical = await realpath(candidate);\n    if (normalizeForCompare(physical) !== normalizeForCompare(candidate)) {"
+              second_replacement = "    const physical = await realpath(candidate);\n    const expectedPhysical = resolve(physicalAnchor, relative(absoluteAnchor, candidate));\n    if (normalizeForCompare(physical) !== normalizeForCompare(expectedPhysical)) {"
+              if text.count(first) != 1 or text.count(second) != 1:
+                  raise SystemExit("expected path validation fragments were not found exactly once")
+              text = text.replace(first, first_replacement).replace(second, second_replacement)
+              path.write_text(text, encoding="utf-8", newline="\n")
           PY
           npm run check
           npm test

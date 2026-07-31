@@ -2,9 +2,19 @@
 
 ## First npm publication bootstrap
 
-The first publication of a new npm package cannot use Trusted Publishing because the npm package settings do not exist yet. The Release workflow detects this state and uses the repository secret `NPM_TOKEN` only for that first publication.
+The first publication of a new npm package cannot use Trusted Publishing because the npm package settings do not exist yet. Use the Release workflow's explicit `bootstrap` publication mode exactly once.
 
 The bootstrap token must be a granular npm access token with package read/write access and non-interactive publishing permission. Store it only as the GitHub Actions repository secret named `NPM_TOKEN`; never commit it to the repository or write it into workflow logs.
+
+For the first publication:
+
+1. Open **Actions → Release → Run workflow**.
+2. Keep the workflow definition branch on `main`.
+3. Enter the exact existing tag, for example `v1.2.0`.
+4. Select `bootstrap` for `publish_mode`.
+5. Run the workflow.
+
+Bootstrap mode is rejected when the npm package or exact version already exists. The token is exposed only to the guarded bootstrap step. Tag-triggered releases and manual runs in `normal` mode never receive `NPM_TOKEN`.
 
 After the first version is published, configure Trusted Publishing as described below. Once a later release succeeds through OIDC, delete the `NPM_TOKEN` repository secret.
 
@@ -32,7 +42,7 @@ npm trust github codex-model-router \
 npm trust list codex-model-router
 ```
 
-Normal releases use only `contents: write` and `id-token: write` and publish with provenance. `NPM_TOKEN` is read only by the explicitly guarded first-publication step when npm reports that the package does not exist.
+Normal releases use only `contents: write` and `id-token: write` and publish with provenance.
 
 ## Release checklist
 
@@ -48,9 +58,14 @@ Normal releases use only `contents: write` and `id-token: write` and publish wit
 
 ## Manual release retry
 
-Open **Actions → Release → Run workflow**, keep the workflow definition on `main`, and enter the exact existing version tag in the required `tag` field, for example `v1.2.0`.
+Open **Actions → Release → Run workflow**, keep the workflow definition on `main`, and enter the exact existing version tag in the required `tag` field.
 
-The branch selector chooses which workflow definition to run; it is not the release target. The workflow checks out the entered tag, verifies that its commit is reachable from `main`, validates that the tag matches `package.json`, and then resumes the idempotent npm and GitHub Release checks.
+Select publication mode as follows:
+
+- `bootstrap`: only for the first creation of the npm package.
+- `normal`: every later version and every idempotent retry after the package exists.
+
+The branch selector chooses which workflow definition to run; it is not the release target. The workflow checks out the entered tag, verifies that its commit is reachable from `main`, validates that the tag matches `package.json`, and then resumes the npm and GitHub Release checks.
 
 Never enter a branch name in the `tag` field. Never reuse a package version that already exists on npm.
 
@@ -67,4 +82,4 @@ For every release that changes generated paths, TOML fields, models, or Codex in
 
 ## Recovery
 
-A failed npm publication does not create a GitHub Release. For an unpublished package, verify the `NPM_TOKEN` bootstrap secret and retry the exact tag. For an existing package, fix the Trusted Publisher relationship and retry the exact tag. Delete and recreate a tag only when it was never published, points to the wrong commit, and npm does not already contain that version. Published npm versions are immutable and must never be reused.
+A failed npm publication does not create a GitHub Release. For an unpublished package, verify the `NPM_TOKEN` bootstrap secret and retry the exact tag with `publish_mode=bootstrap`. For an existing package, fix the Trusted Publisher relationship and retry the exact tag with `publish_mode=normal`. Delete and recreate a tag only when it was never published, points to the wrong commit, and npm does not already contain that version. Published npm versions are immutable and must never be reused.

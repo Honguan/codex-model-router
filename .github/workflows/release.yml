@@ -7,6 +7,14 @@ on:
         description: "Exact release tag, for example v1.2.0"
         required: true
         type: string
+      publish_mode:
+        description: "Use bootstrap only for the first npm publication"
+        required: true
+        default: normal
+        type: choice
+        options:
+          - normal
+          - bootstrap
   push:
     tags:
       - "v*"
@@ -25,12 +33,21 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      PUBLISH_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_mode || 'normal' }}
     steps:
       - name: Validate requested release tag
         shell: bash
         run: |
           if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::Invalid release tag: $RELEASE_TAG"
+            exit 1
+          fi
+          if [ "$PUBLISH_MODE" != "normal" ] && [ "$PUBLISH_MODE" != "bootstrap" ]; then
+            echo "::error::Invalid publication mode: $PUBLISH_MODE"
+            exit 1
+          fi
+          if [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ] && [ "$PUBLISH_MODE" != "normal" ]; then
+            echo "::error::Tag-triggered releases must use normal Trusted Publishing mode"
             exit 1
           fi
 
@@ -88,7 +105,6 @@ jobs:
 
           published="$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>/dev/null || true)"
           if [ "$published" = "$PACKAGE_VERSION" ]; then
-            package_exists=true
             echo "publish=false" >> "$GITHUB_OUTPUT"
             echo "${PACKAGE_NAME}@${PACKAGE_VERSION} already exists on npm"
           else
@@ -96,19 +112,42 @@ jobs:
           fi
           echo "package_exists=$package_exists" >> "$GITHUB_OUTPUT"
 
+      - name: Validate npm publication mode
+        env:
+          PACKAGE_EXISTS: ${{ steps.npm.outputs.package_exists }}
+          SHOULD_PUBLISH: ${{ steps.npm.outputs.publish }}
+        run: |
+          if [ "$PUBLISH_MODE" = "bootstrap" ]; then
+            if [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]; then
+              echo "::error::Bootstrap mode is allowed only for a manual workflow run"
+              exit 1
+            fi
+            if [ "$SHOULD_PUBLISH" != "true" ]; then
+              echo "::error::Bootstrap mode cannot be used because this exact version is already published"
+              exit 1
+            fi
+            if [ "$PACKAGE_EXISTS" = "true" ]; then
+              echo "::error::Bootstrap mode is only for creating the npm package; use normal mode for later versions"
+              exit 1
+            fi
+          elif [ "$SHOULD_PUBLISH" = "true" ] && [ "$PACKAGE_EXISTS" = "false" ]; then
+            echo "::error::The npm package does not exist. Run this exact tag manually with publish_mode=bootstrap"
+            exit 1
+          fi
+
       - name: Bootstrap first npm publication with token and provenance
-        if: steps.npm.outputs.publish == 'true' && steps.npm.outputs.package_exists == 'false'
+        if: steps.npm.outputs.publish == 'true' && env.PUBLISH_MODE == 'bootstrap'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "::error::NPM_TOKEN is required only for the first publication of this package"
+            echo "::error::NPM_TOKEN is required for the first publication bootstrap"
             exit 1
           fi
           npm publish --access public --provenance
 
       - name: Publish to npm with Trusted Publishing and provenance
-        if: steps.npm.outputs.publish == 'true' && steps.npm.outputs.package_exists == 'true'
+        if: steps.npm.outputs.publish == 'true' && env.PUBLISH_MODE == 'normal'
         run: npm publish --access public --provenance
 
       - name: Wait for npm registry propagation

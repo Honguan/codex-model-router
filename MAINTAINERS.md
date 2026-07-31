@@ -1,5 +1,13 @@
 # Maintainer Guide
 
+## First npm publication bootstrap
+
+The first publication of a new npm package cannot use Trusted Publishing because the npm package settings do not exist yet. The Release workflow detects this state and uses the repository secret `NPM_TOKEN` only for that first publication.
+
+The bootstrap token must be a granular npm access token with package read/write access and non-interactive publishing permission. Store it only as the GitHub Actions repository secret named `NPM_TOKEN`; never commit it to the repository or write it into workflow logs.
+
+After the first version is published, configure Trusted Publishing as described below. Once a later release succeeds through OIDC, delete the `NPM_TOKEN` repository secret.
+
 ## npm Trusted Publishing setup
 
 This one-time npm account configuration cannot be committed to the repository.
@@ -24,7 +32,7 @@ npm trust github codex-model-router \
 npm trust list codex-model-router
 ```
 
-The workflow uses only `contents: write` and `id-token: write`, does not read `NPM_TOKEN`, and publishes with provenance. Remove the old `NPM_TOKEN` repository secret after one Trusted Publishing release succeeds.
+Normal releases use only `contents: write` and `id-token: write` and publish with provenance. `NPM_TOKEN` is read only by the explicitly guarded first-publication step when npm reports that the package does not exist.
 
 ## Release checklist
 
@@ -59,4 +67,4 @@ For every release that changes generated paths, TOML fields, models, or Codex in
 
 ## Recovery
 
-A failed npm publication does not create a GitHub Release. Fix the Trusted Publisher or workflow problem, then use the manual exact-tag retry above. Delete and recreate a tag only when it was never published, points to the wrong commit, and npm does not already contain that version. Published npm versions are immutable and must never be reused.
+A failed npm publication does not create a GitHub Release. For an unpublished package, verify the `NPM_TOKEN` bootstrap secret and retry the exact tag. For an existing package, fix the Trusted Publisher relationship and retry the exact tag. Delete and recreate a tag only when it was never published, points to the wrong commit, and npm does not already contain that version. Published npm versions are immutable and must never be reused.

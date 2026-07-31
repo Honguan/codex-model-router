@@ -34,7 +34,10 @@ jobs:
         run: |
           set -euo pipefail
           test "$(find .codex-router-patch -maxdepth 1 -name 'chunk-*.txt' | wc -l)" -eq 7
+          wc -c .codex-router-patch/chunk-*.txt
+          sha1sum .codex-router-patch/chunk-*.txt
           cat .codex-router-patch/chunk-*.txt | base64 --decode > patch.tar.gz
+          sha256sum patch.tar.gz
           tar --extract --gzip --file patch.tar.gz
           npm run check
           npm test

@@ -1,0 +1,59 @@
+name: Diagnose macOS recovery
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    if: github.repository == 'Honguan/codex-model-router'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Diagnose lock and recovery
+        shell: bash
+        run: |
+          set -u
+          root="$(mktemp -d)/project folder"
+          home="$(dirname "$root")/home folder"
+          mkdir -p "$root" "$home"
+          echo "TMPDIR=$TMPDIR"
+          echo "root=$root"
+          echo "root-real=$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$root")"
+
+          echo '--- active lock scenario ---'
+          (
+            cd "$root"
+            HOME="$home" CODEX_MODEL_ROUTER_TESTING=1 CODEX_MODEL_ROUTER_TEST_HOLD_LOCK_MS=1200 node "$GITHUB_WORKSPACE/bin/codex-model-router.js" install
+          ) & first=$!
+          for n in $(seq 1 100); do
+            [ -f "$root/.codex/model-router.lock" ] && break
+            sleep 0.02
+          done
+          (cd "$root" && HOME="$home" node "$GITHUB_WORKSPACE/bin/codex-model-router.js" uninstall) || true
+          wait "$first" || true
+          echo 'doctor after first:'
+          (cd "$root" && HOME="$home" node "$GITHUB_WORKSPACE/bin/codex-model-router.js" doctor) || true
+          find "$(dirname "$root")" -maxdepth 6 -print
+          [ -f "$root/.codex/model-router.lock" ] && cat "$root/.codex/model-router.lock" || true
+
+          echo '--- crash recovery scenario ---'
+          rm -rf "$(dirname "$root")"
+          mkdir -p "$root" "$home"
+          (cd "$root" && HOME="$home" CODEX_MODEL_ROUTER_TESTING=1 CODEX_MODEL_ROUTER_TEST_CRASH_AFTER=1 node "$GITHUB_WORKSPACE/bin/codex-model-router.js" install); echo "crash-status=$?"
+          echo 'journal:'
+          cat "$root/.codex/model-router-transaction.json" || true
+          echo 'lock:'
+          cat "$root/.codex/model-router.lock" || true
+          echo 'reinstall:'
+          (cd "$root" && HOME="$home" node "$GITHUB_WORKSPACE/bin/codex-model-router.js" install); echo "reinstall-status=$?"
+          echo 'doctor:'
+          (cd "$root" && HOME="$home" node "$GITHUB_WORKSPACE/bin/codex-model-router.js" doctor); echo "doctor-status=$?"
+          find "$(dirname "$root")" -maxdepth 7 -print

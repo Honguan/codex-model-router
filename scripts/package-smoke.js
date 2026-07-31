@@ -11,6 +11,7 @@ const npmCli = process.env.npm_execpath;
 if (!npmCli) throw new Error("npm_execpath is unavailable");
 const runNpm = (args, options) => exec(process.execPath, [npmCli, ...args], options);
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const packageJson = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
 const temporary = await mkdtemp(join(tmpdir(), "codex-model-router-pack-"));
 
 try {
@@ -22,6 +23,8 @@ try {
   await runNpm(["init", "-y"], { cwd: project });
   await runNpm(["install", "--no-audit", "--no-fund", "--ignore-scripts", tarball], { cwd: project });
   const binary = join(project, "node_modules", "codex-model-router", "bin", "codex-model-router.js");
+  const version = await exec(process.execPath, [binary, "--version"], { cwd: project });
+  assert.equal(version.stdout.trim(), packageJson.version, "packed CLI version must match package.json");
   await exec(process.execPath, [binary, "install"], { cwd: project });
   await exec(process.execPath, [binary, "doctor"], { cwd: project });
   assert.match(await readFile(join(project, ".codex", "config.toml"), "utf8"), /gpt-5\.6-terra/);

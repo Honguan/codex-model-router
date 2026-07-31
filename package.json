@@ -7,7 +7,9 @@
     "codex-model-router": "./bin/codex-model-router.js"
   },
   "scripts": {
-    "test": "node --test"
+    "check": "node --check bin/codex-model-router.js && node --check lib/router.js && node --check lib/toml.js",
+    "test": "node --test",
+    "test:package": "node scripts/package-smoke.js"
   },
   "engines": {
     "node": ">=18"
@@ -15,8 +17,14 @@
   "files": [
     "bin",
     "lib",
-    "templates",
-    "README.md"
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "codex",
+    "openai",
+    "subagents",
+    "skills"
   ],
   "license": "MIT"
 }

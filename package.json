@@ -1,0 +1,22 @@
+{
+  "name": "codex-model-router",
+  "version": "1.0.0",
+  "description": "Safely install a small Codex model-routing configuration.",
+  "type": "module",
+  "bin": {
+    "codex-model-router": "./bin/codex-model-router.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "templates",
+    "README.md"
+  ],
+  "license": "MIT"
+}

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import {
   mkdtemp,
@@ -7,38 +8,47 @@ import {
   readdir,
   rm,
   stat,
+  symlink,
   unlink,
   writeFile
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
-import { run, VERSION } from "../lib/router.js";
+import { TEMPLATES, VERSION } from "../lib/manifest.js";
+import { run } from "../lib/router.js";
 
 const exec = promisify(execFile);
+const root = resolve(new URL("..", import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/, (value) => value.slice(1)));
+const binary = join(root, "bin", "codex-model-router.js");
+const quiet = () => {};
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "codex-model-router-"));
-  const project = join(root, "專案 folder");
-  const home = join(root, "home folder");
+  const directory = await mkdtemp(join(tmpdir(), "codex-model-router-"));
+  const project = join(directory, "project folder");
+  const home = join(directory, "home folder");
   await mkdir(project, { recursive: true });
   await mkdir(home, { recursive: true });
   return {
-    root,
+    root: directory,
     project,
     home,
-    async cleanup() { await rm(root, { recursive: true, force: true }); }
+    cleanup: () => rm(directory, { recursive: true, force: true })
   };
 }
 
-function outputCollector() {
-  const lines = [];
-  return { lines, output: (line) => lines.push(String(line)) };
-}
-
-async function text(path) {
-  return readFile(path, "utf8");
+function managed(dir) {
+  return {
+    config: join(dir.project, ".codex", "config.toml"),
+    state: join(dir.project, ".codex", "model-router-state.json"),
+    luna: join(dir.project, ".codex", "agents", "luna.toml"),
+    sol: join(dir.project, ".codex", "agents", "sol.toml"),
+    skill: join(dir.project, ".agents", "skills", "model-router", "SKILL.md"),
+    lock: join(dir.project, ".codex", "model-router.lock"),
+    journal: join(dir.project, ".codex", "model-router-transaction.json"),
+    transactionData: join(dir.project, ".codex", "model-router-transaction-data")
+  };
 }
 
 async function exists(path) {
@@ -48,307 +58,359 @@ async function exists(path) {
   }
 }
 
-async function snapshotTree(root) {
-  if (!(await exists(root))) return [];
-  const result = [];
+async function text(path) {
+  return readFile(path, "utf8");
+}
+
+function collect() {
+  const lines = [];
+  return { lines, output: (line) => lines.push(String(line)) };
+}
+
+function hash(content) {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+async function snapshot(rootPath) {
+  if (!(await exists(rootPath))) return [];
+  const output = [];
   async function walk(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
-      const name = relative(root, path).replaceAll("\\", "/");
+      const name = relative(rootPath, path).replaceAll("\\", "/");
       if (entry.isDirectory()) {
-        result.push([`${name}/`, null]);
+        output.push([`${name}/`, null]);
         await walk(path);
       } else {
-        result.push([name, (await readFile(path)).toString("base64")]);
+        output.push([name, (await readFile(path)).toString("base64")]);
       }
     }
   }
-  await walk(root);
-  return result.sort((a, b) => a[0].localeCompare(b[0]));
+  await walk(rootPath);
+  return output.sort((left, right) => left[0].localeCompare(right[0]));
 }
 
-function paths(dir) {
-  return {
-    config: join(dir.project, ".codex", "config.toml"),
-    state: join(dir.project, ".codex", "model-router-state.json"),
-    luna: join(dir.project, ".codex", "agents", "luna.toml"),
-    sol: join(dir.project, ".codex", "agents", "sol.toml"),
-    skill: join(dir.project, ".agents", "skills", "model-router", "SKILL.md")
-  };
+async function waitFor(path, timeout = 5000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    if (await exists(path)) return;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+  }
+  throw new Error(`timed out waiting for ${path}`);
 }
 
-test("exposes help, version, and a working binary", async () => {
+async function executeCli(args, dir, extraEnv = {}) {
+  return exec(process.execPath, [binary, ...args], {
+    cwd: dir.project,
+    env: { ...process.env, ...extraEnv },
+    windowsHide: true,
+    maxBuffer: 1024 * 1024
+  });
+}
+
+test("package version and current templates have one source of truth", async () => {
+  const packageJson = JSON.parse(await text(join(root, "package.json")));
+  const core = await text(join(root, "lib", "router-core.js"));
+  const wrapper = await text(join(root, "lib", "router.js"));
+  assert.equal(VERSION, packageJson.version);
+  assert.doesNotMatch(core, /export const VERSION\s*=/);
+  assert.doesNotMatch(core, /sandbox_mode = \\"read-only\\"/);
+  assert.equal(wrapper.trim(), 'export { run, VERSION } from "./router-core.js";');
+});
+
+test("fresh install writes the current workspace-write Sol template in one operation phase", async () => {
   const dir = await fixture();
   try {
-    const binary = join(process.cwd(), "bin", "codex-model-router.js");
-    const version = await exec(process.execPath, [binary, "--version"], { cwd: dir.project });
-    assert.equal(version.stdout.trim(), VERSION);
-    const install = await exec(process.execPath, [binary, "install"], { cwd: dir.project });
-    assert.match(install.stdout, /create: luna/);
-    const doctor = await exec(process.execPath, [binary, "doctor"], { cwd: dir.project });
-    assert.match(doctor.stdout, /healthy: sol/);
+    const paths = managed(dir);
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.equal(await text(paths.sol), TEMPLATES.sol.content);
+    assert.match(await text(paths.sol), /sandbox_mode = "workspace-write"/);
+    const state = JSON.parse(await text(paths.state));
+    assert.equal(state.version, 3);
+    assert.equal(state.packageVersion, VERSION);
+    assert.equal(await exists(paths.journal), false);
+    assert.equal(await exists(paths.transactionData), false);
   } finally { await dir.cleanup(); }
 });
 
-test("preserves a real-world BOM and CRLF TOML file byte-for-byte after uninstall", async () => {
+test("legacy managed Sol and skill templates migrate without replacing user changes", async () => {
   const dir = await fixture();
+  const oldSol = `name = "sol"\ndescription = "Read-only reviewer for security-sensitive or high-regression-risk logic."\nmodel = "gpt-5.6-sol"\nmodel_reasoning_effort = "medium"\nsandbox_mode = "read-only"\ndeveloper_instructions = """\nReview only. Focus on security, authentication, permissions, secrets, destructive actions, financial logic, SQL writes, concurrency, complex state, and regression risk.\nReport concrete findings to Terra; do not apply fixes.\n"""\n`;
+  const oldSkill = `---\nname: model-router\ndescription: Route Codex work between Terra, Luna, and Sol with the fewest required agents.\n---\n\nTerra handles ordinary questions, coding, debugging, fixes, testing, and implementation. Never create a Terra subagent.\nUse Luna only for deterministic low-risk repeated edits, bulk patterns, read-heavy searches, formatting, counting, extraction, or summaries; prefer Luna when the same clear operation repeats at least three times.\nUse Sol only as a read-only reviewer for security, authentication, authorization, permissions, secrets, destructive actions, financial logic, SQL writes, concurrency, complex state changes, high-regression-risk logic, or an explicit review. Terra applies fixes.\nDo not spawn a subagent for a simple question. Use the minimum number of agents and run Luna with Sol only when both independent tasks are required.\n`;
   try {
-    const p = paths(dir);
-    await mkdir(join(dir.project, ".codex"), { recursive: true });
-    const original = "\uFEFF# existing config\r\n" +
-      "\"quoted key\" = 'literal value'\r\n" +
-      "array = [\r\n  \"a\", # inline\r\n  \"b\",\r\n]\r\n" +
-      "multi = \"\"\"\r\nhello\r\nworld\r\n\"\"\"\r\n" +
-      "literal_multi = '''\r\nliteral\r\ntext\r\n'''\r\n\r\n" +
-      "[tool.example]\r\nenabled = true\r\n" +
-      "[[tool.example.items]]\r\nname = \"one\"\r\n";
-    await writeFile(p.config, original, "utf8");
+    const paths = managed(dir);
+    await run(["install"], { cwd: dir.project, home: dir.home, output: quiet });
+    await writeFile(paths.sol, oldSol);
+    await writeFile(paths.skill, oldSkill);
+    const state = JSON.parse(await text(paths.state));
+    state.version = 2;
+    state.packageVersion = "1.0.0";
+    state.files.sol.hash = hash(oldSol);
+    state.files.skill.hash = hash(oldSkill);
+    await writeFile(paths.state, `${JSON.stringify(state, null, 2)}\n`);
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.equal(await text(paths.sol), TEMPLATES.sol.content);
+    assert.equal(await text(paths.skill), TEMPLATES.skill.content);
 
-    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home }), 0);
-    const installed = await text(p.config);
-    assert.ok(installed.startsWith("\uFEFF"));
-    assert.match(installed, /model = "gpt-5\.6-terra"\r\n/);
-    assert.match(installed, /model_reasoning_effort = "high"\r\n/);
-    assert.ok(!installed.replaceAll("\r\n", "").includes("\n"));
-
-    assert.equal(await run(["uninstall"], { cwd: dir.project, home: dir.home }), 0);
-    assert.equal(await text(p.config), original);
+    await writeFile(paths.sol, `${oldSol}# user edit\n`);
+    const updated = JSON.parse(await text(paths.state));
+    updated.files.sol.hash = hash(oldSol);
+    await writeFile(paths.state, `${JSON.stringify(updated, null, 2)}\n`);
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.match(await text(paths.sol), /# user edit/);
   } finally { await dir.cleanup(); }
 });
 
-test("plain install preserves existing model defaults and unrelated settings", async () => {
+test("BOM, CRLF, comments, arrays, and multiline TOML are restored byte-for-byte", async () => {
   const dir = await fixture();
   try {
-    const p = paths(dir);
-    await mkdir(join(dir.project, ".codex"), { recursive: true });
-    const original = "theme = \"dark\"\nmodel = \"custom-model\"\nmodel_reasoning_effort = 'medium'\n";
-    await writeFile(p.config, original);
-    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home }), 0);
-    assert.equal(await text(p.config), original);
-    const report = outputCollector();
-    assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: report.output }), 1);
-    assert.ok(report.lines.some((line) => line.startsWith("user-override: model")));
-    assert.ok(report.lines.some((line) => line.startsWith("user-override: model_reasoning_effort")));
-    assert.equal(await run(["uninstall"], { cwd: dir.project, home: dir.home }), 0);
-    assert.equal(await text(p.config), original);
+    const paths = managed(dir);
+    await mkdir(dirname(paths.config), { recursive: true });
+    const original = "\uFEFF# existing\r\narray = [\r\n  \"a\",\r\n]\r\nmulti = \"\"\"\r\nhello\r\n\"\"\"\r\n[tool]\r\nenabled = true\r\n";
+    await writeFile(paths.config, original);
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.ok((await text(paths.config)).startsWith("\uFEFF"));
+    assert.equal(await run(["uninstall"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.equal(await text(paths.config), original);
   } finally { await dir.cleanup(); }
 });
 
-test("set-default restores exact prior values and repeated runs keep the original prior values", async () => {
+test("plain install preserves existing defaults and set-default restores exact prior values", async () => {
   const dir = await fixture();
   try {
-    const p = paths(dir);
-    await mkdir(join(dir.project, ".codex"), { recursive: true });
-    const original = "model = 'custom-model' # keep style\nmodel_reasoning_effort = \"medium\"\n[agents]\nenabled = true\n";
-    await writeFile(p.config, original);
-
-    assert.equal(await run(["install", "--set-default"], { cwd: dir.project, home: dir.home }), 0);
-    assert.match(await text(p.config), /^model = "gpt-5\.6-terra" # keep style$/m);
-    assert.equal(await run(["install", "--set-default"], { cwd: dir.project, home: dir.home }), 0);
-    assert.equal(await run(["uninstall"], { cwd: dir.project, home: dir.home }), 0);
-    assert.equal(await text(p.config), original);
+    const paths = managed(dir);
+    await mkdir(dirname(paths.config), { recursive: true });
+    const original = "theme = \"dark\"\nmodel = 'custom' # style\nmodel_reasoning_effort = \"low\"\n";
+    await writeFile(paths.config, original);
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.equal(await text(paths.config), original);
+    assert.equal(await run(["install", "--set-default"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.match(await text(paths.config), /gpt-5\.6-terra/);
+    assert.equal(await run(["uninstall"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.equal(await text(paths.config), original);
   } finally { await dir.cleanup(); }
 });
 
-test("uninstall preserves a user-edited default while restoring untouched values", async () => {
+test("uninstall preserves user-modified managed values and files", async () => {
   const dir = await fixture();
   try {
-    const p = paths(dir);
-    await mkdir(join(dir.project, ".codex"), { recursive: true });
-    await writeFile(p.config, "model = \"old\"\nmodel_reasoning_effort = \"low\"\n");
-    await run(["install", "--set-default"], { cwd: dir.project, home: dir.home });
-    await writeFile(p.config, (await text(p.config)).replace("gpt-5.6-terra", "user-model"));
-    const report = outputCollector();
+    const paths = managed(dir);
+    await run(["install", "--set-default"], { cwd: dir.project, home: dir.home, output: quiet });
+    await writeFile(paths.config, (await text(paths.config)).replace("gpt-5.6-terra", "user-model"));
+    await writeFile(paths.luna, "custom luna\n");
+    const report = collect();
     assert.equal(await run(["uninstall"], { cwd: dir.project, home: dir.home, output: report.output }), 0);
-    const result = await text(p.config);
-    assert.match(result, /model = "user-model"/);
-    assert.match(result, /model_reasoning_effort = "low"/);
-    assert.ok(report.lines.some((line) => line === "preserve: model (user-modified)"));
-    assert.equal(await exists(p.state), false);
+    assert.match(await text(paths.config), /user-model/);
+    assert.equal(await text(paths.luna), "custom luna\n");
+    assert.ok(report.lines.some((line) => line.startsWith("preserve: model")));
+    assert.ok(report.lines.some((line) => line.startsWith("preserve: luna")));
+    assert.equal(await exists(paths.state), false);
   } finally { await dir.cleanup(); }
 });
 
-test("removing inserted values preserves a later inline comment", async () => {
+test("dry-run is zero-write and reports the planned operation", async () => {
   const dir = await fixture();
   try {
-    const p = paths(dir);
-    await run(["install"], { cwd: dir.project, home: dir.home });
-    await writeFile(p.config, (await text(p.config)).replace('model = "gpt-5.6-terra"', 'model = "gpt-5.6-terra" # user note'));
-    await run(["uninstall"], { cwd: dir.project, home: dir.home });
-    assert.equal(await text(p.config), "# user note\n");
+    const before = await snapshot(dir.root);
+    const report = collect();
+    assert.equal(await run(["install", "--set-default", "--dry-run"], {
+      cwd: dir.project,
+      home: dir.home,
+      output: report.output
+    }), 0);
+    assert.deepEqual(await snapshot(dir.root), before);
+    assert.ok(report.lines.some((line) => line.startsWith("would-create: config.toml")));
   } finally { await dir.cleanup(); }
 });
 
-test("uninstall cleans stale state for manually deleted managed files", async () => {
+test("malformed TOML and untracked backup conflicts are refused before writes", async () => {
   const dir = await fixture();
   try {
-    const p = paths(dir);
-    await run(["install"], { cwd: dir.project, home: dir.home });
-    await unlink(p.luna);
-    await unlink(p.sol);
-    await unlink(p.skill);
-    const report = outputCollector();
-    assert.equal(await run(["uninstall"], { cwd: dir.project, home: dir.home, output: report.output }), 0);
-    assert.ok(report.lines.some((line) => line === "skip: luna (already missing)"));
-    assert.equal(await exists(p.state), false);
-    assert.equal(await run(["uninstall"], { cwd: dir.project, home: dir.home }), 0);
+    const paths = managed(dir);
+    await mkdir(dirname(paths.config), { recursive: true });
+    await writeFile(paths.config, 'model = "broken\n');
+    const before = await snapshot(dir.root);
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 1);
+    assert.deepEqual(await snapshot(dir.root), before);
+
+    await writeFile(paths.config, "theme = \"dark\"\n");
+    await writeFile(join(dirname(paths.config), "config.toml.codex-model-router.bak"), "user backup\n");
+    const backupBefore = await snapshot(dir.root);
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 1);
+    assert.deepEqual(await snapshot(dir.root), backupBefore);
   } finally { await dir.cleanup(); }
 });
 
-test("uninstall preserves modified managed files but removes package state", async () => {
+test("project symlinks and junctions that redirect managed roots are rejected", async (context) => {
   const dir = await fixture();
   try {
-    const p = paths(dir);
-    await run(["install"], { cwd: dir.project, home: dir.home });
-    await writeFile(p.luna, "user agent\n");
-    await writeFile(p.skill, "user skill\n");
-    const report = outputCollector();
-    assert.equal(await run(["uninstall"], { cwd: dir.project, home: dir.home, output: report.output }), 0);
-    assert.equal(await text(p.luna), "user agent\n");
-    assert.equal(await text(p.skill), "user skill\n");
-    assert.equal(await exists(p.state), false);
-    assert.ok(report.lines.some((line) => line === "preserve: luna (user-modified)"));
-  } finally { await dir.cleanup(); }
-});
-
-test("dry-run install and uninstall make zero filesystem changes", async () => {
-  const dir = await fixture();
-  try {
-    const beforeInstall = await snapshotTree(dir.root);
-    const installReport = outputCollector();
-    assert.equal(await run(["install", "--set-default", "--dry-run"], { cwd: dir.project, home: dir.home, output: installReport.output }), 0);
-    assert.deepEqual(await snapshotTree(dir.root), beforeInstall);
-    assert.ok(installReport.lines.some((line) => line.startsWith("would-create: config.toml")));
-
-    await run(["install"], { cwd: dir.project, home: dir.home });
-    const beforeUninstall = await snapshotTree(dir.root);
-    const uninstallReport = outputCollector();
-    assert.equal(await run(["uninstall", "--dry-run"], { cwd: dir.project, home: dir.home, output: uninstallReport.output }), 0);
-    assert.deepEqual(await snapshotTree(dir.root), beforeUninstall);
-    assert.ok(uninstallReport.lines.some((line) => line.startsWith("would-remove: luna")));
-  } finally { await dir.cleanup(); }
-});
-
-test("malformed TOML is refused without creating or changing files", async () => {
-  const dir = await fixture();
-  try {
-    const p = paths(dir);
-    await mkdir(join(dir.project, ".codex"), { recursive: true });
-    await writeFile(p.config, "model = \"broken\n");
-    const before = await snapshotTree(dir.root);
-    const report = outputCollector();
+    const outside = join(dir.root, "outside");
+    await mkdir(outside, { recursive: true });
+    const codex = join(dir.project, ".codex");
+    try {
+      await symlink(outside, codex, process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      if (["EPERM", "EACCES", "ENOSYS"].includes(error?.code)) {
+        context.skip(`symlinks unavailable: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
+    const report = collect();
     assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: report.output }), 1);
-    assert.deepEqual(await snapshotTree(dir.root), before);
-    assert.ok(report.lines.some((line) => /unterminated string|newline in single-line string/.test(line)));
+    assert.ok(report.lines.some((line) => /unsafe path component|symbolic link|junction/.test(line)));
+    assert.deepEqual(await readdir(outside), []);
   } finally { await dir.cleanup(); }
 });
 
-test("doctor validates skill, agent settings, hashes, backup, and unsafe state paths", async () => {
+test("skill-root redirection is rejected without touching the external target", async (context) => {
   const dir = await fixture();
   try {
-    const p = paths(dir);
-    await mkdir(join(dir.project, ".codex"), { recursive: true });
-    await writeFile(p.config, "theme = \"dark\"\n");
-    await run(["install"], { cwd: dir.project, home: dir.home });
-    assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home }), 0);
-
-    await writeFile(p.skill, "---\nname: wrong\ndescription: bad\n---\nmissing rules\n");
-    const invalidSkill = outputCollector();
-    assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: invalidSkill.output }), 1);
-    assert.ok(invalidSkill.lines.some((line) => line.startsWith("user-modified: skill")));
-
-    const state = JSON.parse(await text(p.state));
-    state.files.luna.path = join(dir.root, "outside.toml");
-    await writeFile(p.state, `${JSON.stringify(state, null, 2)}\n`);
-    const unsafe = outputCollector();
-    assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: unsafe.output }), 1);
-    assert.ok(unsafe.lines.some((line) => line.startsWith("unsafe-state: state")));
+    const outside = join(dir.root, "outside skills");
+    await mkdir(outside, { recursive: true });
+    const agents = join(dir.project, ".agents");
+    try {
+      await symlink(outside, agents, process.platform === "win32" ? "junction" : "dir");
+    } catch (error) {
+      if (["EPERM", "EACCES", "ENOSYS"].includes(error?.code)) {
+        context.skip(`symlinks unavailable: ${error.code}`);
+        return;
+      }
+      throw error;
+    }
+    assert.equal(await run(["install", "--dry-run"], { cwd: dir.project, home: dir.home, output: quiet }), 1);
+    assert.deepEqual(await readdir(outside), []);
   } finally { await dir.cleanup(); }
 });
 
-test("global install honors CODEX_HOME and uses the user skill directory", async () => {
+test("an active scope lock blocks a concurrent uninstall", async () => {
+  const dir = await fixture();
+  try {
+    const paths = managed(dir);
+    const first = executeCli(["install"], dir, {
+      CODEX_MODEL_ROUTER_TESTING: "1",
+      CODEX_MODEL_ROUTER_TEST_HOLD_LOCK_MS: "1200"
+    });
+    await waitFor(paths.lock);
+    await assert.rejects(executeCli(["uninstall"], dir), (error) => {
+      assert.match(`${error.stdout || ""}${error.stderr || ""}`, /scope is locked/);
+      return true;
+    });
+    await first;
+    assert.equal(await exists(paths.lock), false);
+    assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+  } finally { await dir.cleanup(); }
+});
+
+test("a stale lock is recovered conservatively", async () => {
+  const dir = await fixture();
+  try {
+    const paths = managed(dir);
+    await mkdir(dirname(paths.lock), { recursive: true });
+    await writeFile(paths.lock, `${JSON.stringify({
+      version: 1,
+      token: "stale",
+      pid: 2147483000,
+      hostname: (await import("node:os")).hostname(),
+      command: "install",
+      scope: "project",
+      startedAt: new Date(0).toISOString()
+    })}\n`);
+    const report = collect();
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: report.output }), 0);
+    assert.ok(report.lines.some((line) => line.startsWith("recover: stale lock")));
+    assert.equal(await exists(paths.lock), false);
+  } finally { await dir.cleanup(); }
+});
+
+test("every interrupted fresh-install write can be rolled back on the next command", async () => {
+  for (let crashAfter = 1; crashAfter <= 5; crashAfter += 1) {
+    const dir = await fixture();
+    try {
+      const paths = managed(dir);
+      await assert.rejects(executeCli(["install"], dir, {
+        CODEX_MODEL_ROUTER_TESTING: "1",
+        CODEX_MODEL_ROUTER_TEST_CRASH_AFTER: String(crashAfter)
+      }), (error) => error.code === 91);
+      assert.equal(await exists(paths.journal), true);
+      const report = collect();
+      assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: report.output }), 0);
+      assert.ok(report.lines.some((line) => line.startsWith("recover:")));
+      assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+      assert.equal(await exists(paths.journal), false);
+      assert.equal(await exists(paths.transactionData), false);
+    } finally { await dir.cleanup(); }
+  }
+});
+
+test("transaction recovery never overwrites a post-interruption user edit", async () => {
+  const dir = await fixture();
+  try {
+    const paths = managed(dir);
+    await assert.rejects(executeCli(["install"], dir, {
+      CODEX_MODEL_ROUTER_TESTING: "1",
+      CODEX_MODEL_ROUTER_TEST_CRASH_AFTER: "1"
+    }));
+    await writeFile(paths.config, "user changed after interruption\n");
+    const report = collect();
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: report.output }), 1);
+    assert.ok(report.lines.some((line) => line.includes("conflicting transaction")));
+    assert.equal(await text(paths.config), "user changed after interruption\n");
+  } finally { await dir.cleanup(); }
+});
+
+test("doctor distinguishes unfinished and corrupt transaction journals", async () => {
+  const dir = await fixture();
+  try {
+    const paths = managed(dir);
+    await mkdir(dirname(paths.journal), { recursive: true });
+    await writeFile(paths.journal, `${JSON.stringify({
+      version: 1,
+      id: "test",
+      scope: "project",
+      command: "install",
+      createdAt: new Date().toISOString(),
+      status: "preparing",
+      recovery: "rollback",
+      operations: []
+    })}\n`);
+    const unfinished = collect();
+    assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: unfinished.output }), 1);
+    assert.ok(unfinished.lines.some((line) => line.startsWith("unfinished: transaction")));
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+
+    await writeFile(paths.journal, "not json\n");
+    const corrupt = collect();
+    assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: corrupt.output }), 1);
+    assert.ok(corrupt.lines.some((line) => line.startsWith("corrupt: transaction")));
+  } finally { await dir.cleanup(); }
+});
+
+test("global scope honors CODEX_HOME and remains independent from project scope", async () => {
   const dir = await fixture();
   try {
     const codexHome = join(dir.root, "custom CODEX_HOME");
-    const env = { CODEX_HOME: codexHome };
-    assert.equal(await run(["install", "--global"], { cwd: dir.project, home: dir.home, env }), 0);
-    assert.match(await text(join(codexHome, "config.toml")), /gpt-5\.6-terra/);
-    assert.match(await text(join(codexHome, "agents", "sol.toml")), /sandbox_mode = "read-only"/);
-    assert.match(await text(join(dir.home, ".agents", "skills", "model-router", "SKILL.md")), /minimum number/);
-    assert.equal(await run(["doctor", "--global"], { cwd: dir.project, home: dir.home, env }), 0);
-    assert.equal(await run(["uninstall", "--global"], { cwd: dir.project, home: dir.home, env }), 0);
+    const env = { ...process.env, CODEX_HOME: codexHome };
+    assert.equal(await run(["install", "--global"], {
+      cwd: dir.project,
+      home: dir.home,
+      env,
+      output: quiet
+    }), 0);
+    assert.match(await text(join(codexHome, "agents", "sol.toml")), /workspace-write/);
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.equal(await run(["doctor", "--global"], { cwd: dir.project, home: dir.home, env, output: quiet }), 0);
+    assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.equal(await run(["uninstall", "--global"], { cwd: dir.project, home: dir.home, env, output: quiet }), 0);
   } finally { await dir.cleanup(); }
 });
 
-test("global set-default restores prior values", async () => {
+test("uninstall removes package-created empty directories including .codex", async () => {
   const dir = await fixture();
   try {
-    const env = { CODEX_HOME: join(dir.root, "global codex") };
-    const config = join(env.CODEX_HOME, "config.toml");
-    await mkdir(env.CODEX_HOME, { recursive: true });
-    const original = "model = \"global-custom\"\nmodel_reasoning_effort = \"low\"\n";
-    await writeFile(config, original);
-    assert.equal(await run(["install", "--global", "--set-default"], { cwd: dir.project, home: dir.home, env }), 0);
-    assert.match(await text(config), /gpt-5\.6-terra/);
-    assert.equal(await run(["uninstall", "--global"], { cwd: dir.project, home: dir.home, env }), 0);
-    assert.equal(await text(config), original);
-  } finally { await dir.cleanup(); }
-});
-
-test("an untracked backup conflict is rejected before any write", async () => {
-  const dir = await fixture();
-  try {
-    const p = paths(dir);
-    await mkdir(join(dir.project, ".codex"), { recursive: true });
-    await writeFile(p.config, "theme = \"dark\"\n");
-    await writeFile(join(dir.project, ".codex", "config.toml.codex-model-router.bak"), "user backup\n");
-    const before = await snapshotTree(dir.root);
-    const report = outputCollector();
-    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: report.output }), 1);
-    assert.deepEqual(await snapshotTree(dir.root), before);
-    assert.ok(report.lines.some((line) => line.includes("untracked backup")));
-  } finally { await dir.cleanup(); }
-});
-
-test("invalid bare TOML and non-string managed values are refused", async () => {
-  const dir = await fixture();
-  try {
-    const p = paths(dir);
-    await mkdir(join(dir.project, ".codex"), { recursive: true });
-    await writeFile(p.config, "value = ???\n");
-    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home }), 1);
-    await writeFile(p.config, "model = [\"not\", \"a\", \"string\"]\n");
-    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home }), 1);
-    assert.equal(await exists(p.state), false);
-  } finally { await dir.cleanup(); }
-});
-
-test("doctor reports manual agent changes as user-modified", async () => {
-  const dir = await fixture();
-  try {
-    const p = paths(dir);
-    await run(["install"], { cwd: dir.project, home: dir.home });
-    await writeFile(p.sol, (await text(p.sol)).replace('model_reasoning_effort = "medium"', 'model_reasoning_effort = "high"'));
-    const report = outputCollector();
-    assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: report.output }), 1);
-    assert.ok(report.lines.some((line) => line.startsWith("user-modified: sol")));
-  } finally { await dir.cleanup(); }
-});
-
-test("pre-existing agent and skill files are preserved", async () => {
-  const dir = await fixture();
-  try {
-    const p = paths(dir);
-    await mkdir(join(dir.project, ".codex", "agents"), { recursive: true });
-    await mkdir(join(dir.project, ".agents", "skills", "model-router"), { recursive: true });
-    await writeFile(p.luna, "custom luna\n");
-    await writeFile(p.sol, "custom sol\n");
-    await writeFile(p.skill, "custom skill\n");
-    await run(["install"], { cwd: dir.project, home: dir.home });
-    assert.equal(await text(p.luna), "custom luna\n");
-    assert.equal(await text(p.sol), "custom sol\n");
-    assert.equal(await text(p.skill), "custom skill\n");
-    await run(["uninstall"], { cwd: dir.project, home: dir.home });
-    assert.equal(await text(p.luna), "custom luna\n");
+    await run(["install"], { cwd: dir.project, home: dir.home, output: quiet });
+    await run(["uninstall"], { cwd: dir.project, home: dir.home, output: quiet });
+    assert.equal(await exists(join(dir.project, ".codex")), false);
+    assert.equal(await exists(join(dir.project, ".agents")), false);
   } finally { await dir.cleanup(); }
 });

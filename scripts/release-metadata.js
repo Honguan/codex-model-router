@@ -31,8 +31,8 @@ export function validateReleaseContext({ repository, eventName, refType, refName
   if (repository !== "Honguan/codex-model-router") {
     throw new Error(`release repository is not trusted: ${repository || "missing"}`);
   }
-  if (eventName !== "push" || refType !== "tag") {
-    throw new Error("releases must be triggered by a pushed version tag");
+  if (!["push", "workflow_dispatch"].includes(eventName) || refType !== "tag") {
+    throw new Error("releases require a pushed version tag or a manual retry at that exact tag");
   }
   const expected = `v${version}`;
   if (refName !== expected) throw new Error(`tag ${refName || "missing"} does not match package version ${version}`);

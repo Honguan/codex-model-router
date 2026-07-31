@@ -20,14 +20,16 @@ test("rejects missing, duplicate, malformed, and empty entries", () => {
   assert.throws(() => extractChangelogSection("# Changelog\n## 1.2.0\n## 1.1.0\n- old\n", "1.2.0"), /empty/);
 });
 
-test("release context only accepts the trusted repository and matching version tag", () => {
-  assert.equal(validateReleaseContext({
-    repository: "Honguan/codex-model-router",
-    eventName: "push",
-    refType: "tag",
-    refName: "v1.2.0",
-    version: "1.2.0"
-  }), "v1.2.0");
+test("release context accepts only the trusted repository and exact version tag", () => {
+  for (const eventName of ["push", "workflow_dispatch"]) {
+    assert.equal(validateReleaseContext({
+      repository: "Honguan/codex-model-router",
+      eventName,
+      refType: "tag",
+      refName: "v1.2.0",
+      version: "1.2.0"
+    }), "v1.2.0");
+  }
   assert.throws(() => validateReleaseContext({
     repository: "fork/codex-model-router",
     eventName: "push",
@@ -35,6 +37,13 @@ test("release context only accepts the trusted repository and matching version t
     refName: "v1.2.0",
     version: "1.2.0"
   }), /not trusted/);
+  assert.throws(() => validateReleaseContext({
+    repository: "Honguan/codex-model-router",
+    eventName: "workflow_dispatch",
+    refType: "branch",
+    refName: "main",
+    version: "1.2.0"
+  }), /exact tag/);
   assert.throws(() => validateReleaseContext({
     repository: "Honguan/codex-model-router",
     eventName: "push",

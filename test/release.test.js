@@ -78,7 +78,8 @@ test("release context accepts only the trusted repository and exact version tag"
 });
 
 test("release workflow requires an explicit and isolated first-publication bootstrap", async () => {
-  const workflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+  const rawWorkflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+  const workflow = rawWorkflow.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
   assert.match(workflow, /publish_mode:/);
   assert.match(workflow, /type: choice/);
   assert.match(workflow, /- normal\n\s+- bootstrap/);

@@ -3,7 +3,7 @@ name: Bootstrap v2 npm release
 on:
   push:
     branches:
-      - ops/bootstrap-v2-release
+      - main
 
 permissions:
   contents: write

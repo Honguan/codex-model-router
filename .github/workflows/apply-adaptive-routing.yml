@@ -85,13 +85,21 @@ jobs:
       - run: node --check scripts/apply-adaptive-routing.mjs
       - run: node scripts/apply-adaptive-routing.mjs
 
-      - name: Adapt inherited tests to free-mode behavior
+      - name: Finalize generated source and tests
         shell: python
         run: |
           from pathlib import Path
 
-          path = Path("test/router.test.js")
-          text = path.read_text(encoding="utf-8")
+          core_path = Path("lib/router-core.js")
+          core = core_path.read_text(encoding="utf-8")
+          start = core.index("  const escapedName = expectation.name.replace")
+          end = core.index("  if (!/^description", start)
+          replacement = '  if (!front.split(/\\r?\\n/).some((line) => line.trim() === `name: ${expectation.name}`)) return "incorrect skill name";\n'
+          core = core[:start] + replacement + core[end:]
+          core_path.write_text(core, encoding="utf-8")
+
+          test_path = Path("test/router.test.js")
+          text = test_path.read_text(encoding="utf-8")
 
           old = 'assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 1);\n    assert.deepEqual(await snapshot(dir.root), backupBefore);'
           new = 'assert.equal(await run(["install", "--set-default"], { cwd: dir.project, home: dir.home, output: quiet }), 1);\n    assert.deepEqual(await snapshot(dir.root), backupBefore);'
@@ -108,23 +116,9 @@ jobs:
           text = text.replace(old_conflict, new_conflict, 1)
           text = text.replace('assert.equal(await text(paths.config), "user changed after interruption\\n");', 'assert.equal(await text(paths.terra), "user changed after interruption\\n");', 1)
 
-          path.write_text(text, encoding="utf-8")
+          test_path.write_text(text, encoding="utf-8")
 
       - run: npm run check
-
-      - name: Show fresh-install doctor result
-        shell: bash
-        run: |
-          root="$PWD"
-          temp="$(mktemp -d)"
-          mkdir -p "$temp/project" "$temp/home"
-          (
-            cd "$temp/project"
-            HOME="$temp/home" USERPROFILE="$temp/home" node "$root/bin/codex-model-router.js" install
-            HOME="$temp/home" USERPROFILE="$temp/home" node "$root/bin/codex-model-router.js" doctor || true
-          )
-          rm -rf "$temp"
-
       - run: npm test
       - run: npm run test:package
       - run: git diff --check

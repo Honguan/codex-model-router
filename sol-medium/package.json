@@ -1,0 +1,13 @@
+{
+  "name": "task-tracker-cli",
+  "version": "1.0.0",
+  "description": "A small, dependency-free command-line task tracker.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}

@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  issues: write
 
 concurrency:
   group: bootstrap-v2-release
@@ -21,11 +22,19 @@ jobs:
       PACKAGE_NAME: codex-model-router
       PACKAGE_VERSION: 2.0.0
       RELEASE_TAG: v2.0.0
+      RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 0
+
+      - name: Report acceptance run start
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 24 --body "Release acceptance run started: $RUN_URL"
+          gh issue comment 26 --body "Public-registry end-to-end acceptance run started: $RUN_URL"
 
       - uses: actions/setup-node@v6
         with:
@@ -122,3 +131,20 @@ jobs:
           else
             gh release create "$RELEASE_TAG" --target "$main_commit" --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
           fi
+
+      - name: Complete public-registry acceptance
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 26 --body "Completed by $RUN_URL: ${PACKAGE_NAME}@${PACKAGE_VERSION} is public, the exact registry package passed version, zero-write dry-run, install, doctor, uninstall, and configuration-restoration checks, and the verified GitHub Release was created."
+          gh issue close 26 --reason completed
+          gh issue comment 24 --body "Bootstrap publication and provenance completed in $RUN_URL. The remaining acceptance step is npm Trusted Publisher configuration for repository \`Honguan/codex-model-router\`, workflow \`release.yml\`, followed by one normal OIDC release without \`NPM_TOKEN\`."
+
+      - name: Report acceptance failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 24 --body "Release acceptance failed. Inspect $RUN_URL for the exact failing step."
+          gh issue comment 26 --body "Public-registry acceptance failed. Inspect $RUN_URL for the exact failing step."

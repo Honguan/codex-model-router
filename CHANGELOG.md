@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.0 - 2026-08-01
+
+- Add explicit `v2 enable`, `v2 disable`, and `v2 status` commands for the undocumented Codex multi-agent V2 setting.
+- Keep experimental V2 disabled during every normal install and preserve all pre-existing V2 configuration.
+- Track only the exact marked V2 block created by this package and remove it automatically during uninstall when unchanged.
+- Preserve unrelated UTF-8 BOM, comments, ordering, and LF/CRLF content while using the shared scope lock and atomic replacement.
+- Report managed, disabled, unmanaged, missing, untracked, invalid, and user-modified V2 states.
+- Document that experimental V2 does not guarantee the effective child-agent model and is outside compatibility guarantees.
+
 ## 2.1.0 - 2026-08-01
 
 - Change Luna's default reasoning effort from max to xhigh.

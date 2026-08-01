@@ -60,6 +60,36 @@ codex-model-router install --terra-reasoning xhigh --luna-reasoning low --sol-re
 
 Supported values are `none`, `low`, `medium`, `high`, `xhigh`, and `max`. Per-agent options override `--agent-reasoning`. Later installs preserve unchanged package-managed reasoning choices; manually edited agent files remain protected.
 
+## Optional experimental multi-agent V2
+
+Codex currently has an experimental `multi_agent_v2` configuration that is not part of the public configuration reference. It may be unavailable for some accounts or Codex builds, and its keys or behavior may change without notice.
+
+A normal install never enables it. Enable it explicitly for the current project only after accepting that compatibility risk:
+
+```sh
+codex-model-router v2 enable --dry-run
+codex-model-router v2 enable
+codex-model-router v2 status
+```
+
+The managed block is:
+
+```toml
+[features.multi_agent_v2]
+hide_spawn_agent_metadata = false
+tool_namespace = "agents"
+```
+
+Disable only the unchanged block created by this package:
+
+```sh
+codex-model-router v2 disable
+```
+
+Use `--global` with `enable`, `disable`, or `status` to target the user-level Codex configuration. Pre-existing V2 settings are treated as user-managed and are never overwritten. A normal package uninstall also removes an unchanged package-managed V2 block; modified V2 content is preserved and reported.
+
+Enabling this setting does not guarantee that every child agent resolves to the requested model. Verify actual subagent model usage from Codex session metadata when cost control depends on Luna being selected.
+
 ## Install
 
 Run from npm:
@@ -80,7 +110,7 @@ Installing the CLI globally only makes the command available system-wide. Use `i
 Install a specific GitHub release:
 
 ```sh
-npm install -g https://github.com/Honguan/codex-model-router/archive/refs/tags/v2.1.0.tar.gz
+npm install -g https://github.com/Honguan/codex-model-router/archive/refs/tags/v2.2.0.tar.gz
 codex-model-router install
 ```
 
@@ -89,11 +119,12 @@ codex-model-router install
 Project scope is the default and manages only:
 
 ```text
-.codex/config.toml                              # only with --set-default or a managed migration
+.codex/config.toml                              # only with --set-default, V2 opt-in, or a managed migration
 .codex/agents/terra.toml
 .codex/agents/luna.toml
 .codex/agents/sol.toml
 .codex/model-router-state.json
+.codex/model-router-v2-state.json               # only after explicit `v2 enable`
 .codex/config.toml.codex-model-router.bak       # only when needed
 .agents/skills/model-router/SKILL.md
 .agents/skills/implementation-planning/SKILL.md
@@ -104,6 +135,7 @@ Use global scope with:
 ```sh
 codex-model-router install --global
 codex-model-router doctor --global
+codex-model-router v2 enable --global
 ```
 
 Global scope stores agents under `$CODEX_HOME/agents` and skills under `~/.agents/skills`. When `CODEX_HOME` is unset, it defaults to `~/.codex`.
@@ -134,6 +166,9 @@ codex-model-router install [--global] [--set-default] [--dry-run]
   [--terra-reasoning <effort>] [--luna-reasoning <effort>] [--sol-reasoning <effort>]
 codex-model-router uninstall [--global] [--dry-run]
 codex-model-router doctor [--global]
+codex-model-router v2 enable [--global] [--dry-run]
+codex-model-router v2 disable [--global] [--dry-run]
+codex-model-router v2 status [--global]
 codex-model-router --version
 ```
 
@@ -144,7 +179,8 @@ codex-model-router --version
 - Preserves unrelated TOML settings, comments, BOM, ordering, and LF/CRLF line endings.
 - Rejects malformed, non-UTF-8, duplicate, or unsafe configuration before writing.
 - Rejects symlinks and Windows junctions in managed paths.
-- Uses scope-level locking, atomic transactions, rollback, and conflict-safe recovery.
+- Uses scope-level locking, atomic transactions, rollback, and conflict-safe recovery for normal routing installation.
+- The optional V2 manager uses the same scope lock, atomic file replacement, an exact marked block, and a separate state file.
 - Never overwrites post-interruption user changes.
 - Dry-run creates no files, directories, backups, locks, journals, or state.
 - Never modifies AGENTS.md, shell profiles, editor settings, hooks, MCP servers, telemetry, accounts, or environment variables.
@@ -153,6 +189,8 @@ codex-model-router --version
 
 Compatibility is tested on Node.js 18, 20, 22, and 24 across Windows, Linux, and macOS runners. The selected Codex account must have access to gpt-5.6-terra, gpt-5.6-luna, and gpt-5.6-sol.
 
-Restart Codex after installation so new agents and skills are discovered. Use `doctor` for missing, user-modified, unsafe-state, lock, or interrupted-transaction reports.
+The optional V2 setting is intentionally excluded from compatibility guarantees because it is not publicly documented by OpenAI. Failure or removal of that experimental setting does not affect the normal V1/custom-agent installation.
+
+Restart Codex after installation or V2 changes so new agents, skills, and configuration are discovered. Use `doctor` for missing, user-modified, unsafe-state, lock, interrupted-transaction, or managed V2 reports.
 
 Security vulnerabilities should be reported privately according to [SECURITY.md](SECURITY.md). Maintainer setup and release steps are documented in [MAINTAINERS.md](MAINTAINERS.md).

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { runCli } from "../lib/agent-reasoning-cli.js";
@@ -39,7 +39,8 @@ function paths(dir, codexHome = join(dir.project, ".codex")) {
   return {
     codexHome,
     config: join(codexHome, "config.toml"),
-    state: join(codexHome, "model-router-v2-state.json")
+    state: join(codexHome, "model-router-v2-state.json"),
+    lock: join(codexHome, "model-router.lock")
   };
 }
 
@@ -94,6 +95,35 @@ test("managed V2 preserves BOM, CRLF, and unrelated config byte-for-byte", async
     }), 0);
     assert.equal(await readFile(target.config, "utf8"), original);
     assert.equal(await exists(target.state), false);
+  } finally {
+    await dir.cleanup();
+  }
+});
+
+test("BOM-only config remains identifiable and restores exactly", async () => {
+  const dir = await fixture();
+  try {
+    const target = paths(dir);
+    const original = "\uFEFF";
+    await mkdir(dirname(target.config), { recursive: true });
+    await writeFile(target.config, original, "utf8");
+
+    assert.equal(await runV2Command(["enable"], {
+      cwd: dir.project,
+      home: dir.home,
+      output: () => {}
+    }), 0);
+    assert.equal(await runV2Command(["status"], {
+      cwd: dir.project,
+      home: dir.home,
+      output: () => {}
+    }), 0);
+    assert.equal(await runV2Command(["disable"], {
+      cwd: dir.project,
+      home: dir.home,
+      output: () => {}
+    }), 0);
+    assert.equal(await readFile(target.config, "utf8"), original);
   } finally {
     await dir.cleanup();
   }
@@ -167,6 +197,37 @@ test("user changes inside the managed V2 block are never overwritten", async () 
     }), 1);
     assert.equal(await readFile(target.config, "utf8"), changed);
     assert.equal(await exists(target.state), true);
+  } finally {
+    await dir.cleanup();
+  }
+});
+
+test("stale same-host scope lock is recovered conservatively", async () => {
+  const dir = await fixture();
+  try {
+    const target = paths(dir);
+    await mkdir(target.codexHome, { recursive: true });
+    await writeFile(target.lock, `${JSON.stringify({
+      version: 1,
+      token: "stale-token",
+      pid: 2147483647,
+      hostname: hostname(),
+      command: "interrupted-operation",
+      scope: "project",
+      startedAt: "2000-01-01T00:00:00.000Z"
+    }, null, 2)}\n`, "utf8");
+
+    assert.equal(await runV2Command(["enable"], {
+      cwd: dir.project,
+      home: dir.home,
+      output: () => {}
+    }), 0);
+    assert.equal(await exists(target.lock), false);
+    assert.equal(await runV2Command(["status"], {
+      cwd: dir.project,
+      home: dir.home,
+      output: () => {}
+    }), 0);
   } finally {
     await dir.cleanup();
   }

@@ -1,0 +1,61 @@
+name: Apply adaptive routing refactor
+
+on:
+  push:
+    branches:
+      - feat/adaptive-free-routing
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/adaptive-free-routing
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Prepare nested template literals
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("scripts/apply-adaptive-routing.mjs")
+          text = path.read_text(encoding="utf-8")
+
+          def escape_between(start, end):
+              global text
+              left = text.index(start)
+              right = text.index(end, left)
+              block = text[left:right].replace("${", r"\${")
+              text = text[:left] + block + text[right:]
+
+          escape_between("const patchInstallConfig = `", "core = replaceRange(core, \"function patchInstallConfig")
+          escape_between("core = replaceOnce(core,\n`  if (patched.changed)", '"free mode config behavior");')
+          escape_between('core = replaceRange(core,\n"function validateSkill', '"skill validator");')
+          escape_between("const appendedTests = `", "tests += appendedTests;")
+
+          path.write_text(text, encoding="utf-8")
+
+      - run: node --check scripts/apply-adaptive-routing.mjs
+      - run: node scripts/apply-adaptive-routing.mjs
+      - run: npm run check
+      - run: npm test
+      - run: npm run test:package
+      - run: git diff --check
+
+      - name: Commit generated changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: adopt adaptive free model routing"
+          git push origin HEAD:feat/adaptive-free-routing

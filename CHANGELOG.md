@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.0 - 2026-08-01
+
+- Keep the user-selected primary model unchanged by default; Terra/high is now explicit through --set-default only.
+- Add a fixed Terra/high planning and verification agent while preserving existing specialized agents.
+- Promote Luna to max reasoning for most clear, bounded implementation work.
+- Restrict Sol/medium to read-only last-resort logic rescue after Terra investigation and replanning fail.
+- Split compact routing guidance from the progressively loaded implementation-planning skill.
+- Add plan conformance versus requirement correctness checks, local correction versus replanning, and bounded iteration rules.
+- Add cache-friendly same-thread deltas and self-contained snapshots for new agent threads.
+- Migrate recognized 1.x managed templates without overwriting user-modified files.
+
 ## 1.2.0 - 2026-07-31
 
 - Unify package version, defaults, and managed templates into one source of truth.

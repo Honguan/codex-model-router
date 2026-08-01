@@ -77,7 +77,7 @@ test("release context accepts only the trusted repository and exact version tag"
   }), /does not match/);
 });
 
-test("release workflow isolates first-publication credentials and creates a missing bootstrap tag safely", async () => {
+test("release workflow creates and verifies tags before isolated npm publication", async () => {
   const rawWorkflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
   const workflow = rawWorkflow.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
 
@@ -89,17 +89,24 @@ test("release workflow isolates first-publication credentials and creates a miss
   assert.match(workflow, /ref: main/);
   assert.doesNotMatch(workflow, /ref: \$\{\{ env\.RELEASE_TAG \}\}/);
   assert.match(workflow, /Resolve release target/);
-  assert.match(workflow, /Missing release tags can be created only by a manual bootstrap run/);
+  assert.match(workflow, /Only a manual Release run may create a missing tag/);
   assert.match(workflow, /expected_tag="v\$\(node -p/);
-  assert.match(workflow, /Bootstrap tag creation must use the exact current main commit/);
-  assert.match(workflow, /Create missing bootstrap tag/);
+  assert.match(workflow, /New release tags must use the exact current main commit/);
+  assert.match(workflow, /Create missing release tag/);
   assert.match(workflow, /steps\.target\.outputs\.create_tag == 'true'/);
   assert.match(workflow, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
   assert.match(workflow, /appeared during validation and points to a different commit/);
+  assert.match(workflow, /Verify and check out release tag/);
+  assert.match(workflow, /git describe --tags --exact-match HEAD/);
+  assert.doesNotMatch(workflow, /Missing release tags can be created only by a manual bootstrap run/);
 
   const metadataIndex = workflow.indexOf("Validate release metadata and extract notes");
-  const tagIndex = workflow.indexOf("Create missing bootstrap tag");
+  const tagIndex = workflow.indexOf("Create missing release tag");
+  const verifyIndex = workflow.indexOf("Verify and check out release tag");
+  const inspectIndex = workflow.indexOf("Inspect npm package state");
   assert.ok(metadataIndex >= 0 && tagIndex > metadataIndex, "tag creation must happen only after release metadata validation");
+  assert.ok(verifyIndex > tagIndex, "the exact tag must be checked out after tag creation");
+  assert.ok(inspectIndex > verifyIndex, "npm inspection must happen only after exact-tag verification");
 
   assert.match(workflow, /Bootstrap first npm publication with token and provenance/);
   assert.match(workflow, /env\.PUBLISH_MODE == 'bootstrap'/);

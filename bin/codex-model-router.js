@@ -1,4 +1,4 @@
 #!/usr/bin/env node
-import { run } from "../lib/router.js";
+import { runCli } from "../lib/agent-reasoning-cli.js";
 
-process.exitCode = await run(process.argv.slice(2), { output: console.log });
+process.exitCode = await runCli(process.argv.slice(2), { output: console.log });

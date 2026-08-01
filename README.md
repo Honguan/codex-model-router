@@ -10,7 +10,7 @@ The normal installation uses free mode:
 
 - The user-selected primary model handles conversation, clarification, follow-ups, final replies, and trivial work.
 - Terra/high investigates, produces implementation-ready plans, verifies results, debugs, and replans.
-- Luna/max performs most clear, bounded, repetitive, or independently verifiable implementation work.
+- Luna/xhigh performs most clear, bounded, repetitive, or independently verifiable implementation work.
 - Sol/medium is read-only and used only when Terra still cannot resolve core logic after focused investigation and one materially revised plan, or when the user explicitly requests Sol.
 - Existing built-in and custom agents remain available and take precedence when they are a better match.
 
@@ -49,6 +49,17 @@ codex-model-router install --set-default
 
 Running a later plain `install` returns package-managed default settings to free mode. User-modified model settings are preserved.
 
+## Agent reasoning
+
+The managed agent defaults are Terra/high, Luna/xhigh, and Sol/medium. Override all agents or individual agents during installation:
+
+```sh
+codex-model-router install --agent-reasoning high
+codex-model-router install --terra-reasoning xhigh --luna-reasoning low --sol-reasoning max
+```
+
+Supported values are `none`, `low`, `medium`, `high`, `xhigh`, and `max`. Per-agent options override `--agent-reasoning`. Later installs preserve unchanged package-managed reasoning choices; manually edited agent files remain protected.
+
 ## Install
 
 Run from npm:
@@ -69,7 +80,7 @@ Installing the CLI globally only makes the command available system-wide. Use `i
 Install a specific GitHub release:
 
 ```sh
-npm install -g https://github.com/Honguan/codex-model-router/archive/refs/tags/v2.0.0.tar.gz
+npm install -g https://github.com/Honguan/codex-model-router/archive/refs/tags/v2.1.0.tar.gz
 codex-model-router install
 ```
 
@@ -119,6 +130,8 @@ Terra verifies separately whether implementation matches the plan and whether th
 
 ```text
 codex-model-router install [--global] [--set-default] [--dry-run]
+  [--agent-reasoning <effort>]
+  [--terra-reasoning <effort>] [--luna-reasoning <effort>] [--sol-reasoning <effort>]
 codex-model-router uninstall [--global] [--dry-run]
 codex-model-router doctor [--global]
 codex-model-router --version

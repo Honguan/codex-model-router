@@ -25,8 +25,14 @@ try {
   const binary = join(project, "node_modules", "codex-model-router", "bin", "codex-model-router.js");
   const version = await exec(process.execPath, [binary, "--version"], { cwd: project });
   assert.equal(version.stdout.trim(), packageJson.version);
-  await exec(process.execPath, [binary, "install"], { cwd: project });
-  await exec(process.execPath, [binary, "doctor"], { cwd: project });
+
+  const help = await exec(process.execPath, [binary, "--help"], { cwd: project });
+  assert.match(help.stdout, /npx codex-model-router enable/);
+  assert.match(help.stdout, /npx codex-model-router disable/);
+  assert.match(help.stdout, /npx codex-model-router status/);
+
+  await exec(process.execPath, [binary, "enable"], { cwd: project });
+  await exec(process.execPath, [binary, "status"], { cwd: project });
   await assert.rejects(access(join(project, ".codex", "config.toml")));
   assert.match(await readFile(join(project, ".codex", "agents", "terra.toml"), "utf8"), /gpt-5\.6-terra/);
   assert.match(await readFile(join(project, ".codex", "agents", "luna.toml"), "utf8"), /model_reasoning_effort = "xhigh"/);
@@ -39,7 +45,7 @@ try {
   assert.match(v2Config, /tool_namespace = "agents"/);
   await exec(process.execPath, [binary, "v2", "status"], { cwd: project });
 
-  await exec(process.execPath, [binary, "uninstall"], { cwd: project });
+  await exec(process.execPath, [binary, "disable"], { cwd: project });
   await assert.rejects(access(join(project, ".codex", "config.toml")));
   await assert.rejects(access(join(project, ".codex", "model-router-v2-state.json")));
   await rm(tarball, { force: true });

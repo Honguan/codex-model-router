@@ -1,8 +1,166 @@
 # codex-model-router
 
-A small Node.js CLI that safely installs adaptive Codex subagent routing for Terra, Luna, and Sol without replacing unrelated user configuration or the user's selected primary model.
+A small Node.js CLI that safely enables adaptive Codex subagent routing for Terra, Luna, and Sol without replacing unrelated user configuration or the user's selected primary model.
 
-> Routing is advisory. Codex reads the installed skills and decides when to delegate. This package does not intercept prompts, guarantee a hard model switch, or modify AGENTS.md.
+> Routing is advisory. Codex reads the installed skills and decides when to delegate. This package does not intercept prompts, guarantee a hard model switch, or modify `AGENTS.md`.
+
+## Requirements
+
+- Node.js 18 or newer.
+- A current Codex installation with custom-agent and local-skill support.
+- Access to `gpt-5.6-terra`, `gpt-5.6-luna`, and `gpt-5.6-sol`.
+- Run project-scope commands from the project root that should receive the routing files.
+
+No global npm installation is required. Every user operation can be run through `npx codex-model-router`.
+
+## Project installation
+
+### 1. Preview the files and settings that would be created
+
+```sh
+npx codex-model-router enable --dry-run
+```
+
+The preview is read-only and creates no directories, files, locks, backups, journals, or state.
+
+### 2. Enable routing for the current project
+
+```sh
+npx codex-model-router enable
+```
+
+This installs project-local agents and skills. It does not change the selected primary model unless `--set-default` is supplied.
+
+### 3. Check the installation
+
+```sh
+npx codex-model-router status
+```
+
+Exit code `0` means the managed installation is healthy. Exit code `1` means the output contains an item that requires attention.
+
+### 4. Restart Codex
+
+Restart Codex after enabling, disabling, or changing V2 so the current process reloads agents, skills, and configuration.
+
+## Disable routing
+
+Preview the removal first:
+
+```sh
+npx codex-model-router disable --dry-run
+```
+
+Disable routing for the current project:
+
+```sh
+npx codex-model-router disable
+```
+
+`disable` safely removes only unchanged files and settings managed by this package. User-modified files or values are preserved and reported instead of being overwritten or deleted.
+
+Disabling routing also removes an unchanged package-managed experimental V2 block. It does not remove pre-existing V2 settings or V2 content changed by the user.
+
+## Global installation
+
+Use `--global` to manage the current user's Codex configuration instead of the current project:
+
+```sh
+npx codex-model-router enable --global --dry-run
+npx codex-model-router enable --global
+npx codex-model-router status --global
+npx codex-model-router disable --global --dry-run
+npx codex-model-router disable --global
+```
+
+Global agents are stored under `$CODEX_HOME/agents`. When `CODEX_HOME` is unset, Codex configuration defaults to `~/.codex`. Global skills are stored under `~/.agents/skills`.
+
+Project and global installations are independent. Use the same scope flag when checking or disabling an installation.
+
+## Primary controls
+
+| Purpose | Preferred command |
+| --- | --- |
+| Preview or enable routing | `npx codex-model-router enable [options]` |
+| Check routing health | `npx codex-model-router status [--global]` |
+| Preview or disable routing | `npx codex-model-router disable [options]` |
+| Enable experimental V2 | `npx codex-model-router v2 enable [options]` |
+| Check experimental V2 | `npx codex-model-router v2 status [--global]` |
+| Disable only experimental V2 | `npx codex-model-router v2 disable [options]` |
+| Show the package version | `npx codex-model-router --version` |
+
+The older names remain supported for backward compatibility:
+
+- `install` is equivalent to `enable`.
+- `uninstall` is equivalent to `disable`.
+- `doctor` is equivalent to `status`.
+
+## Optional Terra default
+
+Normal `enable` leaves the user's selected primary model unchanged. To explicitly set and track Terra/high as the selected scope's default:
+
+```sh
+npx codex-model-router enable --set-default
+```
+
+Running a later plain `enable` returns package-managed top-level defaults to free mode. User-modified model settings are preserved.
+
+## Agent reasoning
+
+Managed defaults are Terra/high, Luna/xhigh, and Sol/medium.
+
+Set one reasoning effort for every managed agent:
+
+```sh
+npx codex-model-router enable --agent-reasoning high
+```
+
+Set agents individually:
+
+```sh
+npx codex-model-router enable --terra-reasoning xhigh --luna-reasoning low --sol-reasoning max
+```
+
+Supported values are `none`, `low`, `medium`, `high`, `xhigh`, and `max`. Per-agent options override `--agent-reasoning`. Later enables preserve unchanged package-managed reasoning choices; manually edited agent files remain protected.
+
+## Optional experimental multi-agent V2
+
+Codex currently has an experimental `multi_agent_v2` configuration that is not part of the public configuration reference. It may be unavailable for some accounts or Codex builds, and its keys or behavior may change without notice.
+
+Normal routing enablement never enables V2. Preview and enable V2 explicitly for the current project:
+
+```sh
+npx codex-model-router v2 enable --dry-run
+npx codex-model-router v2 enable
+npx codex-model-router v2 status
+```
+
+The managed block is:
+
+```toml
+[features.multi_agent_v2]
+hide_spawn_agent_metadata = false
+tool_namespace = "agents"
+```
+
+Disable only the package-managed V2 block while keeping normal Terra, Luna, and Sol routing enabled:
+
+```sh
+npx codex-model-router v2 disable --dry-run
+npx codex-model-router v2 disable
+```
+
+Use `--global` with the V2 commands to target user-level Codex configuration:
+
+```sh
+npx codex-model-router v2 enable --global
+npx codex-model-router v2 status --global
+npx codex-model-router v2 disable --global
+```
+
+Pre-existing V2 settings are treated as user-managed and are never overwritten. Modified package-managed V2 content is preserved and reported.
+
+Enabling V2 does not guarantee that every child agent resolves to the requested model. Check Codex session metadata when actual subagent model selection affects cost or policy.
 
 ## Routing model
 
@@ -16,107 +174,9 @@ The normal installation uses free mode:
 
 A normal workflow is Terra -> Luna -> Terra. Implementation errors return to Luna as focused corrections. Plan or logic errors return to Terra for a revised plan before Luna continues. Sol is not a routine reviewer.
 
-## Quick start
-
-Preview without changing files:
-
-```sh
-npx codex-model-router install --dry-run
-```
-
-Install free-mode routing and verify it:
-
-```sh
-npx codex-model-router install
-npx codex-model-router doctor
-```
-
-Remove only unchanged package-managed files and settings:
-
-```sh
-npx codex-model-router uninstall
-```
-
-## Optional Terra default
-
-A normal install does not add or change top-level model settings. Users remain free to select any primary model through Codex.
-
-To explicitly set and track Terra/high as the selected scope's default:
-
-```sh
-codex-model-router install --set-default
-```
-
-Running a later plain `install` returns package-managed default settings to free mode. User-modified model settings are preserved.
-
-## Agent reasoning
-
-The managed agent defaults are Terra/high, Luna/xhigh, and Sol/medium. Override all agents or individual agents during installation:
-
-```sh
-codex-model-router install --agent-reasoning high
-codex-model-router install --terra-reasoning xhigh --luna-reasoning low --sol-reasoning max
-```
-
-Supported values are `none`, `low`, `medium`, `high`, `xhigh`, and `max`. Per-agent options override `--agent-reasoning`. Later installs preserve unchanged package-managed reasoning choices; manually edited agent files remain protected.
-
-## Optional experimental multi-agent V2
-
-Codex currently has an experimental `multi_agent_v2` configuration that is not part of the public configuration reference. It may be unavailable for some accounts or Codex builds, and its keys or behavior may change without notice.
-
-A normal install never enables it. Enable it explicitly for the current project only after accepting that compatibility risk:
-
-```sh
-codex-model-router v2 enable --dry-run
-codex-model-router v2 enable
-codex-model-router v2 status
-```
-
-The managed block is:
-
-```toml
-[features.multi_agent_v2]
-hide_spawn_agent_metadata = false
-tool_namespace = "agents"
-```
-
-Disable only the unchanged block created by this package:
-
-```sh
-codex-model-router v2 disable
-```
-
-Use `--global` with `enable`, `disable`, or `status` to target the user-level Codex configuration. Pre-existing V2 settings are treated as user-managed and are never overwritten. A normal package uninstall also removes an unchanged package-managed V2 block; modified V2 content is preserved and reported.
-
-Enabling this setting does not guarantee that every child agent resolves to the requested model. Verify actual subagent model usage from Codex session metadata when cost control depends on Luna being selected.
-
-## Install
-
-Run from npm:
-
-```sh
-npx codex-model-router install
-```
-
-Install the command globally:
-
-```sh
-npm install -g codex-model-router
-codex-model-router install
-```
-
-Installing the CLI globally only makes the command available system-wide. Use `install --global` to install routing for the current user's Codex configuration.
-
-Install a specific GitHub release:
-
-```sh
-npm install -g https://github.com/Honguan/codex-model-router/archive/refs/tags/v2.2.0.tar.gz
-codex-model-router install
-```
-
 ## Managed files
 
-Project scope is the default and manages only:
+Project scope manages only these paths:
 
 ```text
 .codex/config.toml                              # only with --set-default, V2 opt-in, or a managed migration
@@ -124,23 +184,13 @@ Project scope is the default and manages only:
 .codex/agents/luna.toml
 .codex/agents/sol.toml
 .codex/model-router-state.json
-.codex/model-router-v2-state.json               # only after explicit `v2 enable`
+.codex/model-router-v2-state.json               # only after explicit V2 enablement
 .codex/config.toml.codex-model-router.bak       # only when needed
 .agents/skills/model-router/SKILL.md
 .agents/skills/implementation-planning/SKILL.md
 ```
 
-Use global scope with:
-
-```sh
-codex-model-router install --global
-codex-model-router doctor --global
-codex-model-router v2 enable --global
-```
-
-Global scope stores agents under `$CODEX_HOME/agents` and skills under `~/.agents/skills`. When `CODEX_HOME` is unset, it defaults to `~/.codex`.
-
-Existing files at managed paths are never overwritten. Later manual edits are preserved and reported by `doctor`.
+Existing files at managed paths are never overwritten. Later manual edits are preserved and reported by `status`.
 
 ## Prompt and cache efficiency
 
@@ -148,7 +198,7 @@ The installed model-router skill is intentionally short. Detailed planning rules
 
 Within the same agent thread, accepted state is kept and concise deltas are appended. A new agent thread receives the latest self-contained snapshot. After three deltas or a material contract or logic change, Terra produces a new snapshot.
 
-Prompt-cache reuse is best effort: genuinely new information cannot be a cache hit on first use. Stable wording and ordering improve repeated-prefix reuse, but correctness takes priority over cache behavior.
+Prompt-cache reuse is best effort. Genuinely new information cannot be a cache hit on first use. Stable wording and ordering improve repeated-prefix reuse, but correctness takes priority over cache behavior.
 
 ## Planning rules
 
@@ -158,39 +208,51 @@ Information is marked as CONFIRMED, PROPOSED, or UNKNOWN. Luna does not begin im
 
 Terra verifies separately whether implementation matches the plan and whether the plan plus implementation satisfy the original requirement. After three cycles without new evidence or a changed decision, the workflow stops instead of repeating the same approach.
 
-## Commands
+## Complete command reference
 
 ```text
-codex-model-router install [--global] [--set-default] [--dry-run]
+npx codex-model-router enable [--global] [--set-default] [--dry-run]
   [--agent-reasoning <effort>]
-  [--terra-reasoning <effort>] [--luna-reasoning <effort>] [--sol-reasoning <effort>]
-codex-model-router uninstall [--global] [--dry-run]
-codex-model-router doctor [--global]
-codex-model-router v2 enable [--global] [--dry-run]
-codex-model-router v2 disable [--global] [--dry-run]
-codex-model-router v2 status [--global]
-codex-model-router --version
+  [--terra-reasoning <effort>]
+  [--luna-reasoning <effort>]
+  [--sol-reasoning <effort>]
+npx codex-model-router disable [--global] [--dry-run]
+npx codex-model-router status [--global]
+npx codex-model-router v2 enable [--global] [--dry-run]
+npx codex-model-router v2 disable [--global] [--dry-run]
+npx codex-model-router v2 status [--global]
+npx codex-model-router --version
 ```
-
-`doctor` is read-only. Exit code 0 means healthy; exit code 1 means action is required.
 
 ## Safety behavior
 
 - Preserves unrelated TOML settings, comments, BOM, ordering, and LF/CRLF line endings.
 - Rejects malformed, non-UTF-8, duplicate, or unsafe configuration before writing.
-- Rejects symlinks and Windows junctions in managed paths.
-- Uses scope-level locking, atomic transactions, rollback, and conflict-safe recovery for normal routing installation.
-- The optional V2 manager uses the same scope lock, atomic file replacement, an exact marked block, and a separate state file.
+- Rejects symbolic links and Windows junctions in managed paths.
+- Uses scope-level locking, atomic transactions, rollback, and conflict-safe recovery for normal routing changes.
+- The optional V2 manager uses the same scope lock, atomic replacement, an exact marked block, and a separate state file.
 - Never overwrites post-interruption user changes.
 - Dry-run creates no files, directories, backups, locks, journals, or state.
-- Never modifies AGENTS.md, shell profiles, editor settings, hooks, MCP servers, telemetry, accounts, or environment variables.
+- Never modifies `AGENTS.md`, shell profiles, editor settings, hooks, MCP servers, telemetry, accounts, or environment variables.
 
-## Compatibility
+## Compatibility and troubleshooting
 
-Compatibility is tested on Node.js 18, 20, 22, and 24 across Windows, Linux, and macOS runners. The selected Codex account must have access to gpt-5.6-terra, gpt-5.6-luna, and gpt-5.6-sol.
+Compatibility is tested on Node.js 18, 20, 22, and 24 across Windows, Linux, and macOS runners.
 
-The optional V2 setting is intentionally excluded from compatibility guarantees because it is not publicly documented by OpenAI. Failure or removal of that experimental setting does not affect the normal V1/custom-agent installation.
+The optional V2 setting is excluded from compatibility guarantees because it is not publicly documented by OpenAI. Failure or removal of V2 does not affect normal custom-agent routing.
 
-Restart Codex after installation or V2 changes so new agents, skills, and configuration are discovered. Use `doctor` for missing, user-modified, unsafe-state, lock, interrupted-transaction, or managed V2 reports.
+Run this first when routing does not appear active:
+
+```sh
+npx codex-model-router status
+```
+
+For a global installation, use:
+
+```sh
+npx codex-model-router status --global
+```
+
+Common causes are running the project command from the wrong directory, checking a different scope than the one enabled, a user-modified managed file, an interrupted transaction, an active lock, or not restarting Codex after a change.
 
 Security vulnerabilities should be reported privately according to [SECURITY.md](SECURITY.md). Maintainer setup and release steps are documented in [MAINTAINERS.md](MAINTAINERS.md).

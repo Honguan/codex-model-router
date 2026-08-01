@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.3.0 - 2026-08-02
+
+- Add `enable`, `disable`, and `status` as the preferred user-facing lifecycle commands.
+- Keep `install`, `uninstall`, and `doctor` as backward-compatible aliases.
+- Support all install options, including reasoning overrides and `--set-default`, through `enable`.
+- Make `disable` remove only unchanged package-managed routing and unchanged package-managed V2 configuration.
+- Rewrite README installation, global scope, status, V2, and removal instructions around `npx codex-model-router`.
+- Add lifecycle, help-output, and packed-package coverage for the npx-first commands.
+
 ## 2.2.0 - 2026-08-01
 
 - Add explicit `v2 enable`, `v2 disable`, and `v2 status` commands for the undocumented Codex multi-agent V2 setting.

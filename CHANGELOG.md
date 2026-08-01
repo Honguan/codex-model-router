@@ -8,6 +8,7 @@
 - Make `disable` remove only unchanged package-managed routing and unchanged package-managed V2 configuration.
 - Rewrite README installation, global scope, status, V2, and removal instructions around `npx codex-model-router`.
 - Add lifecycle, help-output, and packed-package coverage for the npx-first commands.
+- Split release preparation from npm publication so the validated remote tag exists before Trusted Publishing begins.
 
 ## 2.2.0 - 2026-08-01
 

@@ -89,3 +89,28 @@ test("invalid reasoning is rejected before writes", async () => {
     assert.ok(lines.some((line) => line.includes("unsupported reasoning effort")));
   } finally { await dir.cleanup(); }
 });
+
+test("enable status and disable provide the complete preferred lifecycle", async () => {
+  const dir = await fixture();
+  try {
+    const options = { cwd: dir.project, home: dir.home, output: quiet };
+    assert.equal(await runCli(["enable", "--luna-reasoning", "high"], options), 0);
+    assert.equal(await agentReasoning(dir.project, "luna"), "high");
+    assert.equal(await runCli(["status"], options), 0);
+    assert.equal(await runCli(["disable"], options), 0);
+    assert.equal(await exists(join(dir.project, ".codex")), false);
+    assert.equal(await exists(join(dir.project, ".agents")), false);
+  } finally { await dir.cleanup(); }
+});
+
+test("help presents npx-first controls and compatibility aliases", async () => {
+  const lines = [];
+  assert.equal(await runCli(["--help"], { output: (line) => lines.push(String(line)) }), 0);
+  const help = lines.join("\n");
+  assert.match(help, /npx codex-model-router enable/);
+  assert.match(help, /npx codex-model-router disable/);
+  assert.match(help, /npx codex-model-router status/);
+  assert.match(help, /install = enable/);
+  assert.match(help, /uninstall = disable/);
+  assert.match(help, /doctor = status/);
+});

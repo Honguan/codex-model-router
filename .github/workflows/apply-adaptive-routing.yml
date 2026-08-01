@@ -34,6 +34,12 @@ jobs:
           path = Path("scripts/apply-adaptive-routing.mjs")
           text = path.read_text(encoding="utf-8")
 
+          old_range = 'return `${source.slice(0, startIndex)}${replacement}${source.slice(endIndex)}`;'
+          new_range = 'return `${source.slice(0, startIndex)}${replacement}${source.slice(endIndex + end.length)}`;'
+          if old_range not in text:
+              raise RuntimeError("replaceRange implementation was not found")
+          text = text.replace(old_range, new_range, 1)
+
           def escape_between(start, end):
               global text
               left = text.index(start)

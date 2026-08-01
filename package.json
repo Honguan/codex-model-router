@@ -1,6 +1,6 @@
 {
   "name": "codex-model-router",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Safely install adaptive free-mode Codex routing for Terra, Luna, and Sol.",
   "type": "module",
   "bin": {

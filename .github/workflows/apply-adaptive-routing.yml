@@ -40,6 +40,34 @@ jobs:
               raise RuntimeError("replaceRange implementation was not found")
           text = text.replace(old_range, new_range, 1)
 
+          helper = '''function replaceRangeAfter(source, anchor, start, end, replacement, label) {
+            const anchorIndex = source.indexOf(anchor);
+            if (anchorIndex < 0) throw new Error(`missing range anchor: ${label}`);
+            const startIndex = source.indexOf(start, anchorIndex + anchor.length);
+            if (startIndex < 0) throw new Error(`missing range start: ${label}`);
+            const endIndex = source.indexOf(end, startIndex + start.length);
+            if (endIndex < 0) throw new Error(`missing range end: ${label}`);
+            return `${source.slice(0, startIndex)}${replacement}${source.slice(endIndex + end.length)}`;
+          }
+
+          '''
+          marker = 'const manifest = `'
+          if marker not in text:
+              raise RuntimeError("manifest marker was not found")
+          text = text.replace(marker, helper + marker, 1)
+
+          doctor_config = 'core = replaceRange(core, "  const config = await readText(location.config);", "  for (const name of [\\"luna\\", \\"sol\\"])", `${doctorConfig}  for (const name of AGENT_NAMES)`, "doctor config and agents");'
+          scoped_doctor_config = 'core = replaceRangeAfter(core, "async function doctor(scope) {", "  const config = await readText(location.config);", "  for (const name of [\\"luna\\", \\"sol\\"])", `${doctorConfig}  for (const name of AGENT_NAMES)`, "doctor config and agents");'
+          if doctor_config not in text:
+              raise RuntimeError("doctor config replacement was not found")
+          text = text.replace(doctor_config, scoped_doctor_config, 1)
+
+          doctor_skills = 'core = replaceRange(core, "  const skill = await readText(location.skill);", "  if (state.backup) {", `${doctorSkills}  if (state.backup) {`, "doctor skills");'
+          scoped_doctor_skills = 'core = replaceRangeAfter(core, "async function doctor(scope) {", "  const skill = await readText(location.skill);", "  if (state.backup) {", `${doctorSkills}  if (state.backup) {`, "doctor skills");'
+          if doctor_skills not in text:
+              raise RuntimeError("doctor skills replacement was not found")
+          text = text.replace(doctor_skills, scoped_doctor_skills, 1)
+
           def escape_between(start, end):
               global text
               left = text.index(start)

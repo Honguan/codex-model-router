@@ -8,8 +8,8 @@
 - Make `disable` remove only unchanged package-managed routing and unchanged package-managed V2 configuration.
 - Rewrite README installation, global scope, status, V2, and removal instructions around `npx codex-model-router`.
 - Add lifecycle, help-output, and packed-package coverage for the npx-first commands.
-- Make manual Release runs create a missing version tag from the validated current `main` commit before npm publication.
-- Check out and verify the exact immutable release tag before npm inspection, Trusted Publishing, public E2E verification, and GitHub Release creation.
+- Split release preparation from npm publication so the validated remote tag exists before Trusted Publishing begins.
+- Check out and verify the exact immutable release tag before npm inspection, public E2E verification, and GitHub Release creation.
 
 ## 2.2.0 - 2026-08-01
 

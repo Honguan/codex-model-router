@@ -77,43 +77,33 @@ test("release context accepts only the trusted repository and exact version tag"
   }), /does not match/);
 });
 
-test("release workflow creates and verifies tags before isolated npm publication", async () => {
+test("release workflow creates and verifies the remote tag before Trusted Publishing", async () => {
   const rawWorkflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
   const workflow = rawWorkflow.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
 
-  assert.match(workflow, /publish_mode:/);
-  assert.match(workflow, /type: choice/);
-  assert.match(workflow, /- normal\n\s+- bootstrap/);
-  assert.match(workflow, /PUBLISH_MODE: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.publish_mode \|\| 'normal' \}\}/);
-
+  assert.match(workflow, /action:/);
+  assert.match(workflow, /- prepare-and-release\n\s+- retry-release/);
+  assert.match(workflow, /prepare_tag:/);
+  assert.match(workflow, /needs: prepare_tag/);
   assert.match(workflow, /ref: main/);
-  assert.doesNotMatch(workflow, /ref: \$\{\{ env\.RELEASE_TAG \}\}/);
-  assert.match(workflow, /Resolve release target/);
-  assert.match(workflow, /Only a manual Release run may create a missing tag/);
-  assert.match(workflow, /expected_tag="v\$\(node -p/);
-  assert.match(workflow, /New release tags must use the exact current main commit/);
-  assert.match(workflow, /Create missing release tag/);
-  assert.match(workflow, /steps\.target\.outputs\.create_tag == 'true'/);
+  assert.match(workflow, /ref: \$\{\{ env\.RELEASE_TAG \}\}/);
   assert.match(workflow, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
-  assert.match(workflow, /appeared during validation and points to a different commit/);
-  assert.match(workflow, /Verify and check out release tag/);
-  assert.match(workflow, /git describe --tags --exact-match HEAD/);
-  assert.doesNotMatch(workflow, /Missing release tags can be created only by a manual bootstrap run/);
-
-  const metadataIndex = workflow.indexOf("Validate release metadata and extract notes");
-  const tagIndex = workflow.indexOf("Create missing release tag");
-  const verifyIndex = workflow.indexOf("Verify and check out release tag");
-  const inspectIndex = workflow.indexOf("Inspect npm package state");
-  assert.ok(metadataIndex >= 0 && tagIndex > metadataIndex, "tag creation must happen only after release metadata validation");
-  assert.ok(verifyIndex > tagIndex, "the exact tag must be checked out after tag creation");
-  assert.ok(inspectIndex > verifyIndex, "npm inspection must happen only after exact-tag verification");
-
-  assert.match(workflow, /Bootstrap first npm publication with token and provenance/);
-  assert.match(workflow, /env\.PUBLISH_MODE == 'bootstrap'/);
+  assert.match(workflow, /Remote tag verification failed/);
+  assert.match(workflow, /does not exist on the remote; publication is forbidden/);
   assert.match(workflow, /Publish to npm with Trusted Publishing and provenance/);
-  assert.match(workflow, /env\.PUBLISH_MODE == 'normal'/);
-  assert.match(workflow, /Run this exact tag manually with publish_mode=bootstrap/);
-  assert.match(workflow, /Bootstrap mode is only for creating the npm package/);
-  assert.equal(workflow.match(/secrets\.NPM_TOKEN/g)?.length, 1);
-  assert.equal(workflow.match(/^\s+NODE_AUTH_TOKEN:/gm)?.length, 1);
+  assert.match(workflow, /npm publish --access public --provenance/);
+
+  const prepareIndex = workflow.indexOf("prepare_tag:");
+  const releaseIndex = workflow.indexOf("  release:");
+  const tagPushIndex = workflow.indexOf('git push origin "refs/tags/$RELEASE_TAG"');
+  const publishIndex = workflow.indexOf("npm publish --access public --provenance");
+  assert.ok(prepareIndex >= 0 && releaseIndex > prepareIndex, "publication must be a separate job after tag preparation");
+  assert.ok(tagPushIndex >= 0 && publishIndex > tagPushIndex, "the tag must be pushed before publication");
+
+  const prepareBlock = workflow.slice(prepareIndex, releaseIndex);
+  assert.doesNotMatch(prepareBlock, /npm publish/);
+  assert.doesNotMatch(workflow, /bootstrap/i);
+  assert.doesNotMatch(workflow, /NPM_TOKEN/);
+  assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN/);
+  assert.match(workflow, /id-token: write/);
 });

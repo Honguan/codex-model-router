@@ -1,0 +1,124 @@
+name: Bootstrap v2 npm release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: bootstrap-v2-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'Honguan/codex-model-router'
+    runs-on: ubuntu-latest
+    env:
+      PACKAGE_NAME: codex-model-router
+      PACKAGE_VERSION: 2.0.0
+      RELEASE_TAG: v2.0.0
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use current OIDC-capable npm CLI
+        run: npm install --global npm@11.18.0
+
+      - name: Validate release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node -p 'require("./package.json").name')" = "$PACKAGE_NAME"
+          test "$(node -p 'require("./package.json").version')" = "$PACKAGE_VERSION"
+          grep -Fq "## $PACKAGE_VERSION - " CHANGELOG.md
+          git fetch origin main --tags --force
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+
+      - run: npm run check
+      - run: npm test
+      - run: npm run test:package
+
+      - name: Extract release notes
+        env:
+          RELEASE_REF_TYPE: tag
+          RELEASE_REF_NAME: ${{ env.RELEASE_TAG }}
+        run: node scripts/release-metadata.js --notes "$RUNNER_TEMP/release-notes.md"
+
+      - name: Inspect registry state
+        id: registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          existing_name="$(npm view "$PACKAGE_NAME" name 2>/dev/null || true)"
+          existing_version="$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>/dev/null || true)"
+          if [ "$existing_version" = "$PACKAGE_VERSION" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is already public"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$existing_name" ] && [ "$existing_name" != "$PACKAGE_NAME" ]; then
+            echo "::error::Unexpected registry package identity: $existing_name"
+            exit 1
+          fi
+
+      - name: Bootstrap first public publication with provenance
+        if: steps.registry.outputs.publish == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::NPM_TOKEN is required for the first npm publication"
+            exit 1
+          fi
+          npm publish --access public --provenance
+
+      - name: Wait for registry propagation
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 18); do
+            published="$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>/dev/null || true)"
+            if [ "$published" = "$PACKAGE_VERSION" ]; then
+              echo "Verified ${PACKAGE_NAME}@${PACKAGE_VERSION} on npm"
+              exit 0
+            fi
+            echo "Waiting for npm registry propagation (${attempt}/18)"
+            sleep 10
+          done
+          echo "::error::Unable to verify ${PACKAGE_NAME}@${PACKAGE_VERSION} on npm"
+          exit 1
+
+      - name: Verify public package end to end
+        run: node scripts/verify-published.js "$PACKAGE_NAME" "$PACKAGE_VERSION"
+
+      - name: Create verified GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          main_commit="$(git rev-parse origin/main)"
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            git fetch origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG" --force
+            test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$main_commit"
+          fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "$RELEASE_TAG release already exists"
+          else
+            gh release create "$RELEASE_TAG" --target "$main_commit" --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi

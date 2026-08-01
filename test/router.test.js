@@ -132,7 +132,7 @@ test("fresh install preserves the primary model and writes adaptive templates", 
     assert.equal(await text(paths.skill), TEMPLATES.skill.content);
     assert.equal(await text(paths.planning), TEMPLATES.planning.content);
     assert.match(await text(paths.terra), /sandbox_mode = "read-only"/);
-    assert.match(await text(paths.luna), /model_reasoning_effort = "max"/);
+    assert.match(await text(paths.luna), /model_reasoning_effort = "xhigh"/);
     assert.match(await text(paths.luna), /sandbox_mode = "workspace-write"/);
     assert.match(await text(paths.sol), /sandbox_mode = "read-only"/);
     const state = JSON.parse(await text(paths.state));

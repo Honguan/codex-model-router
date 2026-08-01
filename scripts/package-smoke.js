@@ -29,7 +29,7 @@ try {
   await exec(process.execPath, [binary, "doctor"], { cwd: project });
   await assert.rejects(access(join(project, ".codex", "config.toml")));
   assert.match(await readFile(join(project, ".codex", "agents", "terra.toml"), "utf8"), /gpt-5\.6-terra/);
-  assert.match(await readFile(join(project, ".codex", "agents", "luna.toml"), "utf8"), /model_reasoning_effort = "max"/);
+  assert.match(await readFile(join(project, ".codex", "agents", "luna.toml"), "utf8"), /model_reasoning_effort = "xhigh"/);
   assert.match(await readFile(join(project, ".codex", "agents", "sol.toml"), "utf8"), /sandbox_mode = "read-only"/);
   assert.match(await readFile(join(project, ".agents", "skills", "implementation-planning", "SKILL.md"), "utf8"), /LOCAL_CHOICE/);
   await exec(process.execPath, [binary, "uninstall"], { cwd: project });

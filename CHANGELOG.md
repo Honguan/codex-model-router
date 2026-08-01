@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0 - 2026-08-01
+
+- Change Luna's default reasoning effort from max to xhigh.
+- Add install-time reasoning controls for all managed agents or individual Terra, Luna, and Sol agents.
+- Preserve package-managed custom reasoning values across later installs while retaining user-modified file protection.
+- Validate supported GPT-5.6 reasoning efforts before any filesystem writes.
+
 ## 2.0.0 - 2026-08-01
 
 - Keep the user-selected primary model unchanged by default; Terra/high is now explicit through --set-default only.

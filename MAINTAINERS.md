@@ -10,9 +10,13 @@ For the first publication:
 
 1. Open **Actions → Release → Run workflow**.
 2. Keep the workflow definition branch on `main`.
-3. Enter the exact existing tag, for example `v1.2.0`.
+3. Enter the exact version tag required by `package.json`, for example `v1.2.0`.
 4. Select `bootstrap` for `publish_mode`.
 5. Run the workflow.
+
+The tag may already exist. When it does, the workflow checks out that exact tag and verifies that it is reachable from `main`.
+
+When the tag does not yet exist, a manual bootstrap run starts from the exact current `origin/main` commit, verifies the requested tag matches `v<package.json version>`, runs all tests, validates the release metadata and current Changelog entry, and only then creates and pushes the tag. Normal mode and tag-triggered runs are never allowed to create a missing tag.
 
 Bootstrap mode is rejected when the npm package or exact version already exists. The token is exposed only to the guarded bootstrap step. Tag-triggered releases and manual runs in `normal` mode never receive `NPM_TOKEN`.
 
@@ -51,23 +55,24 @@ Normal releases use only `contents: write` and `id-token: write` and publish wit
 3. Run `npm run check`, `npm test`, `npm run test:package`, and `npm pack --dry-run`.
 4. Confirm CI passes on Windows, Linux, and macOS with Node.js 18, 20, 22, and 24.
 5. Confirm actionlint and ShellCheck pass.
-6. Create and push the exact tag `v<package.json version>` from `main`.
-7. Verify the Release workflow publishes with npm provenance.
-8. Verify the clean public npm end-to-end step passes before the GitHub Release appears.
-9. Confirm `npm view codex-model-router version` and `npx --yes codex-model-router@<version> --version`.
+6. For normal releases, create and push the exact tag `v<package.json version>` from `main`.
+7. For the first package publication only, the manual bootstrap flow may create the missing exact tag after all validations pass.
+8. Verify the Release workflow publishes with npm provenance.
+9. Verify the clean public npm end-to-end step passes before the GitHub Release appears.
+10. Confirm `npm view codex-model-router version` and `npx --yes codex-model-router@<version> --version`.
 
 ## Manual release retry
 
-Open **Actions → Release → Run workflow**, keep the workflow definition on `main`, and enter the exact existing version tag in the required `tag` field.
+Open **Actions → Release → Run workflow**, keep the workflow definition on `main`, and enter the exact version tag in the required `tag` field.
 
 Select publication mode as follows:
 
-- `bootstrap`: only for the first creation of the npm package.
-- `normal`: every later version and every idempotent retry after the package exists.
+- `bootstrap`: only for the first creation of the npm package; it may safely create the missing exact version tag from current `main` after validation.
+- `normal`: every later version and every idempotent retry after the package exists; the tag must already exist.
 
-The branch selector chooses which workflow definition to run; it is not the release target. The workflow checks out the entered tag, verifies that its commit is reachable from `main`, validates that the tag matches `package.json`, and then resumes the npm and GitHub Release checks.
+The branch selector chooses which workflow definition to run; it is not the release target. For an existing tag, the workflow checks out that tag, verifies that its commit is reachable from `main`, validates that the tag matches `package.json`, and then resumes the npm and GitHub Release checks.
 
-Never enter a branch name in the `tag` field. Never reuse a package version that already exists on npm.
+Never enter a branch name in the `tag` field. Never reuse a package version that already exists on npm. Never use bootstrap mode for later versions.
 
 ## Compatibility update checklist
 
@@ -82,4 +87,6 @@ For every release that changes generated paths, TOML fields, models, or Codex in
 
 ## Recovery
 
-A failed npm publication does not create a GitHub Release. For an unpublished package, verify the `NPM_TOKEN` bootstrap secret and retry the exact tag with `publish_mode=bootstrap`. For an existing package, fix the Trusted Publisher relationship and retry the exact tag with `publish_mode=normal`. Delete and recreate a tag only when it was never published, points to the wrong commit, and npm does not already contain that version. Published npm versions are immutable and must never be reused.
+A failed npm publication does not create a GitHub Release. For an unpublished package, verify the `NPM_TOKEN` bootstrap secret and run the exact version with `publish_mode=bootstrap`; the workflow can create the missing tag safely when necessary. For an existing package, fix the Trusted Publisher relationship and retry the existing exact tag with `publish_mode=normal`.
+
+Delete or recreate a tag manually only when npm does not contain that version and the existing tag is demonstrably wrong. Published npm versions are immutable and must never be reused.

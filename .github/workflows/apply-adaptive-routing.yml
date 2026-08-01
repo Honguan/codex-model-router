@@ -26,7 +26,7 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
-      - name: Prepare nested template literals
+      - name: Prepare refactor script
         shell: python
         run: |
           from pathlib import Path
@@ -84,7 +84,47 @@ jobs:
 
       - run: node --check scripts/apply-adaptive-routing.mjs
       - run: node scripts/apply-adaptive-routing.mjs
+
+      - name: Adapt inherited tests to free-mode behavior
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("test/router.test.js")
+          text = path.read_text(encoding="utf-8")
+
+          old = 'assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 1);\n    assert.deepEqual(await snapshot(dir.root), backupBefore);'
+          new = 'assert.equal(await run(["install", "--set-default"], { cwd: dir.project, home: dir.home, output: quiet }), 1);\n    assert.deepEqual(await snapshot(dir.root), backupBefore);'
+          if old not in text:
+              raise RuntimeError("backup-conflict assertion was not found")
+          text = text.replace(old, new, 1)
+
+          text = text.replace('assert.match(await text(join(codexHome, "agents", "sol.toml")), /workspace-write/);', 'assert.match(await text(join(codexHome, "agents", "sol.toml")), /read-only/);', 1)
+
+          old_conflict = 'await writeFile(paths.config, "user changed after interruption\\n");'
+          new_conflict = 'await writeFile(paths.terra, "user changed after interruption\\n");'
+          if old_conflict not in text:
+              raise RuntimeError("transaction conflict edit was not found")
+          text = text.replace(old_conflict, new_conflict, 1)
+          text = text.replace('assert.equal(await text(paths.config), "user changed after interruption\\n");', 'assert.equal(await text(paths.terra), "user changed after interruption\\n");', 1)
+
+          path.write_text(text, encoding="utf-8")
+
       - run: npm run check
+
+      - name: Show fresh-install doctor result
+        shell: bash
+        run: |
+          root="$PWD"
+          temp="$(mktemp -d)"
+          mkdir -p "$temp/project" "$temp/home"
+          (
+            cd "$temp/project"
+            HOME="$temp/home" USERPROFILE="$temp/home" node "$root/bin/codex-model-router.js" install
+            HOME="$temp/home" USERPROFILE="$temp/home" node "$root/bin/codex-model-router.js" doctor || true
+          )
+          rm -rf "$temp"
+
       - run: npm test
       - run: npm run test:package
       - run: git diff --check

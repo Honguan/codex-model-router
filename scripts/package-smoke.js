@@ -32,7 +32,16 @@ try {
   assert.match(await readFile(join(project, ".codex", "agents", "luna.toml"), "utf8"), /model_reasoning_effort = "xhigh"/);
   assert.match(await readFile(join(project, ".codex", "agents", "sol.toml"), "utf8"), /sandbox_mode = "read-only"/);
   assert.match(await readFile(join(project, ".agents", "skills", "implementation-planning", "SKILL.md"), "utf8"), /LOCAL_CHOICE/);
+
+  await exec(process.execPath, [binary, "v2", "enable"], { cwd: project });
+  const v2Config = await readFile(join(project, ".codex", "config.toml"), "utf8");
+  assert.match(v2Config, /\[features\.multi_agent_v2\]/);
+  assert.match(v2Config, /tool_namespace = "agents"/);
+  await exec(process.execPath, [binary, "v2", "status"], { cwd: project });
+
   await exec(process.execPath, [binary, "uninstall"], { cwd: project });
+  await assert.rejects(access(join(project, ".codex", "config.toml")));
+  await assert.rejects(access(join(project, ".codex", "model-router-v2-state.json")));
   await rm(tarball, { force: true });
 } finally {
   await rm(temporary, { recursive: true, force: true });

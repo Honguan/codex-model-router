@@ -77,13 +77,30 @@ test("release context accepts only the trusted repository and exact version tag"
   }), /does not match/);
 });
 
-test("release workflow requires an explicit and isolated first-publication bootstrap", async () => {
+test("release workflow isolates first-publication credentials and creates a missing bootstrap tag safely", async () => {
   const rawWorkflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
   const workflow = rawWorkflow.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+
   assert.match(workflow, /publish_mode:/);
   assert.match(workflow, /type: choice/);
   assert.match(workflow, /- normal\n\s+- bootstrap/);
   assert.match(workflow, /PUBLISH_MODE: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.publish_mode \|\| 'normal' \}\}/);
+
+  assert.match(workflow, /ref: main/);
+  assert.doesNotMatch(workflow, /ref: \$\{\{ env\.RELEASE_TAG \}\}/);
+  assert.match(workflow, /Resolve release target/);
+  assert.match(workflow, /Missing release tags can be created only by a manual bootstrap run/);
+  assert.match(workflow, /expected_tag="v\$\(node -p/);
+  assert.match(workflow, /Bootstrap tag creation must use the exact current main commit/);
+  assert.match(workflow, /Create missing bootstrap tag/);
+  assert.match(workflow, /steps\.target\.outputs\.create_tag == 'true'/);
+  assert.match(workflow, /git push origin "refs\/tags\/\$RELEASE_TAG"/);
+  assert.match(workflow, /appeared during validation and points to a different commit/);
+
+  const metadataIndex = workflow.indexOf("Validate release metadata and extract notes");
+  const tagIndex = workflow.indexOf("Create missing bootstrap tag");
+  assert.ok(metadataIndex >= 0 && tagIndex > metadataIndex, "tag creation must happen only after release metadata validation");
+
   assert.match(workflow, /Bootstrap first npm publication with token and provenance/);
   assert.match(workflow, /env\.PUBLISH_MODE == 'bootstrap'/);
   assert.match(workflow, /Publish to npm with Trusted Publishing and provenance/);

@@ -31,7 +31,7 @@ env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
-  prepare-tag:
+  prepare_tag:
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'prepare-and-release'
     runs-on: ubuntu-latest
     steps:
@@ -107,14 +107,14 @@ jobs:
           echo "Created $RELEASE_TAG at $validated_commit. Publication starts only after this job completes."
 
   release:
-    needs: prepare-tag
+    needs: prepare_tag
     if: >-
       always() &&
       github.repository == 'Honguan/codex-model-router' &&
       (
         github.event_name == 'push' ||
         (github.event_name == 'workflow_dispatch' && inputs.action == 'retry-release') ||
-        needs.prepare-tag.result == 'success'
+        needs.prepare_tag.result == 'success'
       )
     runs-on: ubuntu-latest
     steps:
@@ -125,7 +125,7 @@ jobs:
             echo "::error::Invalid release tag: $RELEASE_TAG"
             exit 1
           fi
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "${{ inputs.action }}" = "prepare-and-release" ] && [ "${{ needs.prepare-tag.result }}" != "success" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "${{ inputs.action }}" = "prepare-and-release" ] && [ "${{ needs.prepare_tag.result }}" != "success" ]; then
             echo "::error::Tag preparation did not complete successfully"
             exit 1
           fi

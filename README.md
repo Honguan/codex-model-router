@@ -1,222 +1,158 @@
 # codex-model-router
 
-A small Node.js CLI that safely installs advisory Codex subagent routing for Terra, Luna, and Sol without replacing unrelated user configuration.
+A small Node.js CLI that safely installs adaptive Codex subagent routing for Terra, Luna, and Sol without replacing unrelated user configuration or the user's selected primary model.
 
-> Routing is advisory. Terra reads the installed skill and decides when to delegate. This package does not intercept prompts or guarantee a hard model switch.
+> Routing is advisory. Codex reads the installed skills and decides when to delegate. This package does not intercept prompts, guarantee a hard model switch, or modify AGENTS.md.
 
-## Compatibility
+## Routing model
 
-Compatibility was verified on 2026-07-31 against:
+The normal installation uses free mode:
 
-- Codex CLI `0.145.0` or newer
-- Node.js 18, 20, 22, and 24
-- Windows, Linux, and macOS GitHub-hosted runners
-- Codex project agents in `.codex/agents/`
-- Codex user agents in `$CODEX_HOME/agents/` or `~/.codex/agents/`
-- project skills in `.agents/skills/`
-- user skills in `~/.agents/skills/`
+- The user-selected primary model handles conversation, clarification, follow-ups, final replies, and trivial work.
+- Terra/high investigates, produces implementation-ready plans, verifies results, debugs, and replans.
+- Luna/xhigh performs most clear, bounded, repetitive, or independently verifiable implementation work.
+- Sol/medium is read-only and used only when Terra still cannot resolve core logic after focused investigation and one materially revised plan, or when the user explicitly requests Sol.
+- Existing built-in and custom agents remain available and take precedence when they are a better match.
 
-The selected Codex account must have access to `gpt-5.6-terra`, `gpt-5.6-luna`, and `gpt-5.6-sol`. Older Codex versions may not recognize the generated agent or skill files.
+A normal workflow is Terra -> Luna -> Terra. Implementation errors return to Luna as focused corrections. Plan or logic errors return to Terra for a revised plan before Luna continues. Sol is not a routine reviewer.
 
 ## Quick start
 
-Preview a project installation without changing files:
+Preview without changing files:
 
 ```sh
-npx codex-model-router install --set-default --dry-run
+npx codex-model-router install --dry-run
 ```
 
-Install Terra/high as the project default, add Luna and Sol, then verify:
+Install free-mode routing and verify it:
 
 ```sh
-npx codex-model-router install --set-default
+npx codex-model-router install
 npx codex-model-router doctor
 ```
 
-Remove only unchanged package-managed settings and files:
+Remove only unchanged package-managed files and settings:
 
 ```sh
 npx codex-model-router uninstall
 ```
 
+## Optional Terra default
+
+A normal install does not add or change top-level model settings. Users remain free to select any primary model through Codex.
+
+To explicitly set and track Terra/high as the selected scope's default:
+
+```sh
+codex-model-router install --set-default
+```
+
+Running a later plain `install` returns package-managed default settings to free mode. User-modified model settings are preserved.
+
+## Agent reasoning
+
+The managed agent defaults are Terra/high, Luna/xhigh, and Sol/medium. Override all agents or individual agents during installation:
+
+```sh
+codex-model-router install --agent-reasoning high
+codex-model-router install --terra-reasoning xhigh --luna-reasoning low --sol-reasoning max
+```
+
+Supported values are `none`, `low`, `medium`, `high`, `xhigh`, and `max`. Per-agent options override `--agent-reasoning`. Later installs preserve unchanged package-managed reasoning choices; manually edited agent files remain protected.
+
 ## Install
 
-Run directly from npm without installing the CLI globally:
+Run from npm:
 
 ```sh
 npx codex-model-router install
 ```
 
-Install the CLI command globally:
+Install the command globally:
 
 ```sh
 npm install -g codex-model-router
 codex-model-router install
 ```
 
-Installing the CLI globally only makes the command available system-wide. It does not modify user-level Codex configuration. The separate `install --global` option applies routing to the current user's Codex configuration.
+Installing the CLI globally only makes the command available system-wide. Use `install --global` to install routing for the current user's Codex configuration.
 
 Install a specific GitHub release:
 
 ```sh
-npm install -g https://github.com/Honguan/codex-model-router/archive/refs/tags/v1.2.0.tar.gz
+npm install -g https://github.com/Honguan/codex-model-router/archive/refs/tags/v2.1.0.tar.gz
 codex-model-router install
 ```
 
-## Project and global scope
+## Managed files
 
-Project scope is the default:
-
-```sh
-codex-model-router install
-```
-
-It manages only:
+Project scope is the default and manages only:
 
 ```text
-.codex/config.toml
+.codex/config.toml                              # only with --set-default or a managed migration
+.codex/agents/terra.toml
 .codex/agents/luna.toml
 .codex/agents/sol.toml
 .codex/model-router-state.json
-.codex/config.toml.codex-model-router.bak        # only when needed
+.codex/config.toml.codex-model-router.bak       # only when needed
 .agents/skills/model-router/SKILL.md
+.agents/skills/implementation-planning/SKILL.md
 ```
 
-During a mutating operation it may temporarily create:
-
-```text
-.codex/model-router.lock
-.codex/model-router-transaction.json
-.codex/model-router-transaction-data/
-```
-
-These transient files are removed after a successful operation or safe recovery.
-
-Use global scope only when the routing configuration should apply to every Codex project for the current user:
+Use global scope with:
 
 ```sh
 codex-model-router install --global
 codex-model-router doctor --global
 ```
 
-Global scope manages the equivalent paths under `$CODEX_HOME` and stores the skill under `~/.agents/skills/model-router/`. When `CODEX_HOME` is unset, it defaults to `~/.codex`.
+Global scope stores agents under `$CODEX_HOME/agents` and skills under `~/.agents/skills`. When `CODEX_HOME` is unset, it defaults to `~/.codex`.
 
-## Existing settings
+Existing files at managed paths are never overwritten. Later manual edits are preserved and reported by `doctor`.
 
-A normal install adds Terra/high only when the top-level values are absent. Existing model values are preserved:
+## Prompt and cache efficiency
 
-```sh
-codex-model-router install
-```
+The installed model-router skill is intentionally short. Detailed planning rules live in the separate implementation-planning skill and are loaded only for nontrivial or uncertain changes.
 
-To explicitly set and track Terra/high:
+Within the same agent thread, accepted state is kept and concise deltas are appended. A new agent thread receives the latest self-contained snapshot. After three deltas or a material contract or logic change, Terra produces a new snapshot.
 
-```sh
-codex-model-router install --set-default
-```
+Prompt-cache reuse is best effort: genuinely new information cannot be a cache hit on first use. Stable wording and ordering improve repeated-prefix reuse, but correctness takes priority over cache behavior.
 
-`--set-default` changes only:
+## Planning rules
 
-```toml
-model = "gpt-5.6-terra"
-model_reasoning_effort = "high"
-```
+For nontrivial changes, Terra identifies only applicable correctness-critical details, including exact files and symbols, names, contracts, parameter flow, callers, ordered logic, invariants, fixed decisions, safe local choices, return conditions, and acceptance criteria.
 
-The exact prior values are recorded. Uninstall restores them only while the current values still match what the package installed. Later user edits are preserved and reported instead of overwritten.
+Information is marked as CONFIRMED, PROPOSED, or UNKNOWN. Luna does not begin implementation while an UNKNOWN can materially change behavior, targets, contracts, parameter flow, control flow, or compatibility.
 
-Existing Luna, Sol, or skill files are never overwritten. Unrelated TOML settings, comments, BOM, ordering, and LF/CRLF line endings are preserved.
-
-## Installed routing
-
-- Terra/high handles normal questions, coding, debugging, fixes, tests, and implementation.
-- Luna/high handles deterministic repeated edits, bulk patterns, searches, formatting, counting, extraction, and summaries.
-- Sol/medium/workspace-write handles security-sensitive or high-regression-risk review and implementation.
-- Sol normally reviews first and may edit files only when Terra explicitly delegates implementation or a confirmed fix.
-- Simple questions do not spawn a subagent.
-
-Users may edit model names, reasoning levels, and `sandbox_mode` directly in the generated TOML files. Later installs preserve manual edits, and `doctor` reports changed managed files.
+Terra verifies separately whether implementation matches the plan and whether the plan plus implementation satisfy the original requirement. After three cycles without new evidence or a changed decision, the workflow stops instead of repeating the same approach.
 
 ## Commands
 
 ```text
 codex-model-router install [--global] [--set-default] [--dry-run]
+  [--agent-reasoning <effort>]
+  [--terra-reasoning <effort>] [--luna-reasoning <effort>] [--sol-reasoning <effort>]
 codex-model-router uninstall [--global] [--dry-run]
 codex-model-router doctor [--global]
 codex-model-router --version
 ```
 
-`doctor` is read-only. Exit code `0` means healthy; exit code `1` means action is required.
-
-Common statuses:
-
-- `healthy`: the managed item matches its expected state.
-- `preserve` or `user-modified`: user content was detected and left unchanged.
-- `missing` or `invalid`: a required item is absent or malformed.
-- `unsafe-state`: state paths or path components are unsafe.
-- `locked` or `stale-lock`: another operation is active or a previous process ended unexpectedly.
-- `unfinished`, `recoverable`, `conflicting`, or `corrupt`: an interrupted transaction needs attention.
+`doctor` is read-only. Exit code 0 means healthy; exit code 1 means action is required.
 
 ## Safety behavior
 
+- Preserves unrelated TOML settings, comments, BOM, ordering, and LF/CRLF line endings.
 - Rejects malformed, non-UTF-8, duplicate, or unsafe configuration before writing.
-- Rejects symlinks and Windows junctions in managed paths so writes cannot escape the selected scope.
-- Uses a scope-level process lock to prevent concurrent install/uninstall races.
-- Uses an atomic transaction journal and private snapshots to recover interrupted multi-file operations.
-- Never overwrites post-interruption user changes during recovery.
-- Uses atomic file replacement and rollback for handled failures.
-- Removes or restores only unchanged package-managed content.
-- Never modifies `AGENTS.md`, shell profiles, editor settings, hooks, MCP servers, telemetry, accounts, or environment variables.
+- Rejects symlinks and Windows junctions in managed paths.
+- Uses scope-level locking, atomic transactions, rollback, and conflict-safe recovery.
+- Never overwrites post-interruption user changes.
 - Dry-run creates no files, directories, backups, locks, journals, or state.
-- Tests use temporary directories and never touch real Codex configuration.
+- Never modifies AGENTS.md, shell profiles, editor settings, hooks, MCP servers, telemetry, accounts, or environment variables.
 
-## Troubleshooting
+## Compatibility
 
-### Agents or skills do not appear
+Compatibility is tested on Node.js 18, 20, 22, and 24 across Windows, Linux, and macOS runners. The selected Codex account must have access to gpt-5.6-terra, gpt-5.6-luna, and gpt-5.6-sol.
 
-Restart Codex after installation. Verify the selected scope with `doctor` or `doctor --global`, and confirm that your Codex version is at least the compatibility baseline above.
+Restart Codex after installation so new agents and skills are discovered. Use `doctor` for missing, user-modified, unsafe-state, lock, or interrupted-transaction reports.
 
-### `user-modified`
-
-The file or setting was changed after installation. The CLI intentionally leaves it untouched. Review the reported path and decide manually whether to retain the custom value or reinstall the package template under a different name.
-
-### `unsafe-state` or unsafe path component
-
-Do not delete the reported file blindly. Check whether `.codex`, `.agents`, `CODEX_HOME`, or one of their parent directories is a symlink or Windows junction. Use a normal directory inside the intended project or user scope.
-
-### Active or stale lock
-
-An active lock includes the operation and process ID. Wait for that process to finish. A later mutating command automatically removes a stale lock only when the recorded local process is no longer alive. A corrupt or remote-host lock must be inspected manually before removal.
-
-### Interrupted transaction
-
-Run `doctor` first. A mutating command automatically rolls back `unfinished` or `recoverable` transactions when all hashes still match. `conflicting` means a managed file changed after interruption; preserve that file and resolve the journal manually rather than forcing an overwrite. `corrupt` means the journal or snapshot cannot be trusted.
-
-### Untracked backup already exists
-
-The CLI refuses to replace `config.toml.codex-model-router.bak`. Compare it with `config.toml`, move it to a clearly named safe location, and retry only after confirming its ownership.
-
-### Permission or `CODEX_HOME` errors
-
-For project scope, verify write access to the project. For global scope, print and verify `CODEX_HOME`; do not run with elevated privileges merely to bypass an unexplained path error.
-
-### Manual backup recovery
-
-The managed `.bak` is the exact pre-change configuration. Before restoring it, stop Codex, preserve the current `config.toml` under a new name, verify both files, and restore only within the same project/global scope.
-
-### npx uses an old version
-
-Request the exact version first:
-
-```sh
-npx --yes codex-model-router@1.2.0 --version
-```
-
-When necessary, inspect the npm cache with `npm cache verify`; avoid deleting unrelated cache directories blindly.
-
-## Security and release integrity
-
-Security vulnerabilities should be reported privately according to [SECURITY.md](SECURITY.md).
-
-Releases use npm Trusted Publishing through GitHub Actions, verified provenance, exact tag/version validation, current-version-only release notes, workflow linting, and a clean public-registry end-to-end install/doctor/uninstall check before the GitHub Release is created. Maintainer setup and release steps are documented in [MAINTAINERS.md](MAINTAINERS.md).
-
-Codex references: [Subagents](https://developers.openai.com/codex/subagents), [Build skills](https://developers.openai.com/codex/build-skills), and [Configuration reference](https://developers.openai.com/codex/config-reference).
+Security vulnerabilities should be reported privately according to [SECURITY.md](SECURITY.md). Maintainer setup and release steps are documented in [MAINTAINERS.md](MAINTAINERS.md).

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,8 +27,11 @@ try {
   assert.equal(version.stdout.trim(), packageJson.version);
   await exec(process.execPath, [binary, "install"], { cwd: project });
   await exec(process.execPath, [binary, "doctor"], { cwd: project });
-  assert.match(await readFile(join(project, ".codex", "config.toml"), "utf8"), /gpt-5\.6-terra/);
-  assert.match(await readFile(join(project, ".codex", "agents", "sol.toml"), "utf8"), /workspace-write/);
+  await assert.rejects(access(join(project, ".codex", "config.toml")));
+  assert.match(await readFile(join(project, ".codex", "agents", "terra.toml"), "utf8"), /gpt-5\.6-terra/);
+  assert.match(await readFile(join(project, ".codex", "agents", "luna.toml"), "utf8"), /model_reasoning_effort = "xhigh"/);
+  assert.match(await readFile(join(project, ".codex", "agents", "sol.toml"), "utf8"), /sandbox_mode = "read-only"/);
+  assert.match(await readFile(join(project, ".agents", "skills", "implementation-planning", "SKILL.md"), "utf8"), /LOCAL_CHOICE/);
   await exec(process.execPath, [binary, "uninstall"], { cwd: project });
   await rm(tarball, { force: true });
 } finally {

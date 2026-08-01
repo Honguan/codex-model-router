@@ -42,9 +42,11 @@ function managed(dir) {
   return {
     config: join(dir.project, ".codex", "config.toml"),
     state: join(dir.project, ".codex", "model-router-state.json"),
+    terra: join(dir.project, ".codex", "agents", "terra.toml"),
     luna: join(dir.project, ".codex", "agents", "luna.toml"),
     sol: join(dir.project, ".codex", "agents", "sol.toml"),
     skill: join(dir.project, ".agents", "skills", "model-router", "SKILL.md"),
+    planning: join(dir.project, ".agents", "skills", "implementation-planning", "SKILL.md"),
     lock: join(dir.project, ".codex", "model-router.lock"),
     journal: join(dir.project, ".codex", "model-router-transaction.json"),
     transactionData: join(dir.project, ".codex", "model-router-transaction-data")
@@ -118,18 +120,28 @@ test("package version and current templates have one source of truth", async () 
   assert.equal(wrapper.trim(), 'export { run, VERSION } from "./router-core.js";');
 });
 
-test("fresh install writes the current workspace-write Sol template in one operation phase", async () => {
+test("fresh install preserves the primary model and writes adaptive templates", async () => {
   const dir = await fixture();
   try {
     const paths = managed(dir);
     assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.equal(await exists(paths.config), false);
+    assert.equal(await text(paths.terra), TEMPLATES.terra.content);
+    assert.equal(await text(paths.luna), TEMPLATES.luna.content);
     assert.equal(await text(paths.sol), TEMPLATES.sol.content);
-    assert.match(await text(paths.sol), /sandbox_mode = "workspace-write"/);
+    assert.equal(await text(paths.skill), TEMPLATES.skill.content);
+    assert.equal(await text(paths.planning), TEMPLATES.planning.content);
+    assert.match(await text(paths.terra), /sandbox_mode = "read-only"/);
+    assert.match(await text(paths.luna), /model_reasoning_effort = "xhigh"/);
+    assert.match(await text(paths.luna), /sandbox_mode = "workspace-write"/);
+    assert.match(await text(paths.sol), /sandbox_mode = "read-only"/);
     const state = JSON.parse(await text(paths.state));
-    assert.equal(state.version, 3);
+    assert.equal(state.version, 4);
     assert.equal(state.packageVersion, VERSION);
+    assert.deepEqual(state.config.values, {});
     assert.equal(await exists(paths.journal), false);
     assert.equal(await exists(paths.transactionData), false);
+    assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
   } finally { await dir.cleanup(); }
 });
 
@@ -236,7 +248,7 @@ test("malformed TOML and untracked backup conflicts are refused before writes", 
     await writeFile(paths.config, "theme = \"dark\"\n");
     await writeFile(join(dirname(paths.config), "config.toml.codex-model-router.bak"), "user backup\n");
     const backupBefore = await snapshot(dir.root);
-    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 1);
+    assert.equal(await run(["install", "--set-default"], { cwd: dir.project, home: dir.home, output: quiet }), 1);
     assert.deepEqual(await snapshot(dir.root), backupBefore);
   } finally { await dir.cleanup(); }
 });
@@ -351,11 +363,11 @@ test("transaction recovery never overwrites a post-interruption user edit", asyn
       CODEX_MODEL_ROUTER_TESTING: "1",
       CODEX_MODEL_ROUTER_TEST_CRASH_AFTER: "1"
     }));
-    await writeFile(paths.config, "user changed after interruption\n");
+    await writeFile(paths.terra, "user changed after interruption\n");
     const report = collect();
     assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: report.output }), 1);
     assert.ok(report.lines.some((line) => line.includes("conflicting transaction")));
-    assert.equal(await text(paths.config), "user changed after interruption\n");
+    assert.equal(await text(paths.terra), "user changed after interruption\n");
   } finally { await dir.cleanup(); }
 });
 
@@ -397,7 +409,7 @@ test("global scope honors CODEX_HOME and remains independent from project scope"
       env,
       output: quiet
     }), 0);
-    assert.match(await text(join(codexHome, "agents", "sol.toml")), /workspace-write/);
+    assert.match(await text(join(codexHome, "agents", "sol.toml")), /read-only/);
     assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
     assert.equal(await run(["doctor", "--global"], { cwd: dir.project, home: dir.home, env, output: quiet }), 0);
     assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
@@ -412,5 +424,83 @@ test("uninstall removes package-created empty directories including .codex", asy
     await run(["uninstall"], { cwd: dir.project, home: dir.home, output: quiet });
     assert.equal(await exists(join(dir.project, ".codex")), false);
     assert.equal(await exists(join(dir.project, ".agents")), false);
+  } finally { await dir.cleanup(); }
+});
+
+
+test("managed v1.2 routing templates migrate to adaptive roles", async () => {
+  const dir = await fixture();
+  const oldLuna = `name = "luna"
+description = "Low-risk helper for repeated edits, searches, formatting, extraction, counting, and summaries."
+model = "gpt-5.6-luna"
+model_reasoning_effort = "high"
+developer_instructions = """
+Handle only deterministic, low-risk work delegated by Terra.
+Follow the assigned pattern exactly and return a concise result.
+Escalate ambiguous, security-sensitive, or logic-heavy decisions to Terra.
+"""
+`;
+  const oldSol = `name = "sol"
+description = "High-capability specialist for security-sensitive or high-regression-risk work."
+model = "gpt-5.6-sol"
+model_reasoning_effort = "medium"
+sandbox_mode = "workspace-write"
+developer_instructions = """
+Review or implement only when explicitly delegated by Terra.
+For review-only tasks, report concrete findings without changing files.
+For implementation tasks, make focused changes, run relevant checks, and report the result to Terra.
+Focus on security, authentication, permissions, secrets, destructive actions, financial logic, SQL writes, concurrency, complex state, and regression risk.
+Do not expand the scope beyond the delegated task.
+"""
+`;
+  const oldSkill = `---
+name: model-router
+description: Route Codex work between Terra, Luna, and Sol with the fewest required agents.
+---
+
+Terra handles ordinary questions, coding, debugging, fixes, testing, and implementation. Never create a Terra subagent.
+Use Luna only for deterministic low-risk repeated edits, bulk patterns, read-heavy searches, formatting, counting, extraction, or summaries; prefer Luna when the same clear operation repeats at least three times.
+Use Sol for security, authentication, authorization, permissions, secrets, destructive actions, financial logic, SQL writes, concurrency, complex state changes, high-regression-risk logic, or an explicit review. Prefer review-only delegation first; when implementation or a confirmed fix is explicitly required, Sol may edit files in workspace-write mode and run relevant checks.
+Do not spawn a subagent for a simple question. Use the minimum number of agents and run Luna with Sol only when both independent tasks are required.
+`;
+  try {
+    const paths = managed(dir);
+    await run(["install"], { cwd: dir.project, home: dir.home, output: quiet });
+    await writeFile(paths.luna, oldLuna);
+    await writeFile(paths.sol, oldSol);
+    await writeFile(paths.skill, oldSkill);
+    const state = JSON.parse(await text(paths.state));
+    state.version = 3;
+    state.packageVersion = "1.2.0";
+    state.files.luna.hash = hash(oldLuna);
+    state.files.sol.hash = hash(oldSol);
+    state.files.skill.hash = hash(oldSkill);
+    delete state.files.terra;
+    delete state.files.planning;
+    await writeFile(paths.state, `${JSON.stringify(state, null, 2)}\n`);
+    await unlink(paths.terra);
+    await unlink(paths.planning);
+
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.equal(await text(paths.terra), TEMPLATES.terra.content);
+    assert.equal(await text(paths.luna), TEMPLATES.luna.content);
+    assert.equal(await text(paths.sol), TEMPLATES.sol.content);
+    assert.equal(await text(paths.skill), TEMPLATES.skill.content);
+    assert.equal(await text(paths.planning), TEMPLATES.planning.content);
+  } finally { await dir.cleanup(); }
+});
+
+test("plain install releases package-managed defaults back to free mode", async () => {
+  const dir = await fixture();
+  try {
+    const paths = managed(dir);
+    assert.equal(await run(["install", "--set-default"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.match(await text(paths.config), /gpt-5\.6-terra/);
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.equal(await exists(paths.config), false);
+    const state = JSON.parse(await text(paths.state));
+    assert.deepEqual(state.config.values, {});
+    assert.equal(state.backup, null);
+    assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
   } finally { await dir.cleanup(); }
 });

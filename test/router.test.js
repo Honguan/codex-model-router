@@ -65,6 +65,12 @@ async function text(path) {
   return readFile(path, "utf8");
 }
 
+function activeSandboxAssignments(content) {
+  return content.split(/\r?\n/)
+    .filter((line) => /^sandbox_mode\s*=\s*"[^"]+"\s*$/.test(line))
+    .map((line) => line.match(/^sandbox_mode\s*=\s*"([^"]+)"\s*$/)[1]);
+}
+
 function collect() {
   const lines = [];
   return { lines, output: (line) => lines.push(String(line)) };
@@ -132,10 +138,10 @@ test("fresh install preserves the primary model and writes adaptive templates", 
     assert.equal(await text(paths.sol), TEMPLATES.sol.content);
     assert.equal(await text(paths.skill), TEMPLATES.skill.content);
     assert.equal(await text(paths.planning), TEMPLATES.planning.content);
-    assert.match(await text(paths.terra), /sandbox_mode = "read-only"/);
+    assert.deepEqual(activeSandboxAssignments(await text(paths.terra)), ["workspace-write"]);
     assert.match(await text(paths.luna), /model_reasoning_effort = "xhigh"/);
-    assert.match(await text(paths.luna), /sandbox_mode = "workspace-write"/);
-    assert.match(await text(paths.sol), /sandbox_mode = "read-only"/);
+    assert.deepEqual(activeSandboxAssignments(await text(paths.luna)), ["workspace-write"]);
+    assert.deepEqual(activeSandboxAssignments(await text(paths.sol)), ["workspace-write"]);
     const state = JSON.parse(await text(paths.state));
     assert.equal(state.version, 5);
     assert.equal(state.packageVersion, VERSION);

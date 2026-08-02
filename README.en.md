@@ -43,7 +43,8 @@ Skills are always installed under the applicable Codex root at `.codex/skills/<s
 npx codex-model-router@latest install \
   --terra-reasoning high \
   --luna-reasoning xhigh \
-  --sol-reasoning medium
+  --sol-reasoning medium \
+  --terra-fast
 ```
 
 | Option | Purpose |
@@ -53,10 +54,16 @@ npx codex-model-router@latest install \
 | `--terra-reasoning <level>` | Set Terra reasoning |
 | `--luna-reasoning <level>` | Set Luna reasoning |
 | `--sol-reasoning <level>` | Set Sol reasoning |
+| `--agent-fast` / `--no-agent-fast` | Set Fast preference for all managed child roles; role options take precedence |
+| `--terra-fast` / `--no-terra-fast` | Set Terra Fast preference |
+| `--luna-fast` / `--no-luna-fast` | Set Luna Fast preference |
+| `--sol-fast` / `--no-sol-fast` | Set Sol Fast preference |
 | `--v2` | Enable or repair package-managed V2 |
 | `--global` | Apply the installation to the current user |
 
 Reasoning values: `none`, `low`, `medium`, `high`, `xhigh`, `max`.
+
+Fast and reasoning are independent settings, retained only for the same child role; neither affects the primary nor another role. Run `npx codex-model-router@latest status [--global]` to view configured and effective values. Codex currently exposes no per-agent Fast runtime control, so `configured=true` explicitly reports `effective=not-supported`; the installer never enables global `fast_mode` or maps Fast to reasoning.
 
 ## Visual guides
 
@@ -115,10 +122,26 @@ All diagrams are collapsed by default. Select a heading to expand it.
 
 - The same model is not spawned twice in one workflow.
 - A matching primary model performs that role in the primary thread.
-- Luna is the only writable role.
+- Luna, Terra, and Sol have write capability, but stage and execution flags gate every write.
 - Terra plans and independently verifies.
 - Sol joins only after a non-PASS verification result.
 - The final response always returns through the primary model.
+
+## Workflow recovery contract
+
+Recovery is a declarative host-consumed contract; this package provides no JavaScript runtime API, CLI, or child-process persistence. The host supplies valid roles, the current primary, the executor, and topology. More than two child slots must produce `EVIDENCE_GAP` with no unproven action.
+
+The state file is fixed at `RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`. The registry is root-level `{version?, root_session_id, workflow_id, agents:{[role]:{agent_id,status,handoff}}, diagnostics?}`; `agents` is an object keyed by role, never an array, and nested `root`/`workflow` objects are forbidden. Use exact IDs only; unknown or ambiguous IDs are never replaced. Same-primary, disabled, invalid (policy-invalid), primary-switch, and excess instances are `removed-by-policy`; every saved instance has exactly one result: `reused`, `replaced`, `removed-by-policy`, `resume-failed`, `not-supported`, `stale-workflow`, or `invalid-agent-id`.
+
+Replacement requires a host-confirmed missing, closed, invalid, per-instance unsupported, or resume-failed condition, explicit host creation, and policy permission; the handoff is copied unchanged. The primary thread, regardless of selected model, owns registry loading, atomic persistence, and runtime coordination; Terra/Sol child roles and planning are registry read-only, while Luna remains the workspace/PLAN writer. Write through an atomic sibling-file flush, close, and rename sequence; any failure retains the prior registry, publishes no partial state, and prevents dependent actions. These are template contract fixtures, not live E2E.
+
+## Workflow escalation state machine
+
+Each task also persists task-scoped state at `WORKFLOW_STATE_PATH=<ARTIFACT_DIR>/workflow-state.v1.json`, separate from the recovery registry. State includes workflow/root IDs, requirement/evidence/plan versions, current stage, latest verdict, primary model, Sol review failures, Terra execution attempts, all three execution flags, active role IDs, ownership for every role, and `blocked_reason`. A same-workflow primary switch preserves versions, counters, stage, verdict, and disabled flags; a new workflow creates fresh initial state.
+
+Stages are monotonic: `INITIAL` → `SOL_REPLAN_WITH_LUNA` → `SOL_PLAN_REVIEW_WITH_TERRA` → `SOL_FULL_TAKEOVER`. `PASS` terminates; `EVIDENCE_GAP` and `REQUIREMENT_CLARIFICATION` remain in the same stage without an attempt or counter increment; only `FAIL_PLAN` and `FAIL_IMPLEMENTATION` advance. Luna/Terra primaries begin with Terra planning/review and Luna execution; primary Sol INITIAL has no Luna child and uses Terra as the only child executor. After Luna is permanently disabled, Terra may execute at most twice; a further failure permanently disables Terra and gives Sol full takeover.
+
+All role TOML files have workspace-write capability, but stage and flags gate writes: Sol is read-only before `SOL_FULL_TAKEOVER`, and a disabled primary remains coord-only permanently. There are at most two children, no child matching the primary model, and spawning occurs only when required by the stage. The primary thread performs atomic flush/close/rename; failure retains prior state, publishes no partial state, and performs no dependent action. This is a declarative host contract, not a runtime API, CLI, or live E2E implementation.
 
 ## V2
 

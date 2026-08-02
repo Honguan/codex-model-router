@@ -84,6 +84,25 @@ Fast 與思考等級是獨立設定，且僅保存到同一個子代理角色；
 </details>
 
 <details>
+<summary><strong>企劃檔持久化與清理流程</strong></summary>
+
+```mermaid
+flowchart TD
+    A[Terra 或 Sol 回傳企劃內容] --> B{目前有可寫入 executor？}
+    B -->|否| C[保留 self-contained in-memory artifact\n不宣稱已寫入]
+    B -->|是| D[原子寫入\n<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md]
+    D --> E[狀態：active\n保存 plan_path 與 owner]
+    E --> F{驗證 PASS？}
+    F -->|否／阻塞／恢復／切換| G[保留相同路徑、版本與 owner]
+    F -->|是| H[狀態：pending-cleanup]
+    H --> I[同一 cleanup owner\n僅移除該 workflow 目錄]
+    I -->|成功| J[狀態：removed]
+    I -->|失敗| K[狀態：cleanup-failed 並回報]
+```
+
+</details>
+
+<details>
 <summary><strong>模型使用占比估算</strong></summary>
 
 ![模型使用占比估算](docs/images/zh-TW/model-usage-share.png)

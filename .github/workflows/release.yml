@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Exact release tag, for example v3.0.1"
+        description: "Exact release tag, for example v2.3.0"
         required: true
         type: string
       action:
@@ -16,8 +16,6 @@ on:
           - prepare-and-release
           - retry-release
   push:
-    branches:
-      - main
     tags:
       - "v*"
 
@@ -26,15 +24,15 @@ permissions:
   id-token: write
 
 concurrency:
-  group: release-${{ github.ref == 'refs/heads/main' && 'v3.0.1' || github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
-  RELEASE_TAG: ${{ github.ref == 'refs/heads/main' && 'v3.0.1' || github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
   prepare_tag:
-    if: (github.event_name == 'workflow_dispatch' && inputs.action == 'prepare-and-release') || github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'prepare-and-release'
     runs-on: ubuntu-latest
     steps:
       - name: Validate requested tag
@@ -129,10 +127,6 @@ jobs:
           fi
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "${{ inputs.action }}" = "prepare-and-release" ] && [ "${{ needs.prepare_tag.result }}" != "success" ]; then
             echo "::error::Tag preparation did not complete successfully"
-            exit 1
-          fi
-          if [ "$GITHUB_REF" = "refs/heads/main" ] && [ "${{ needs.prepare_tag.result }}" != "success" ]; then
-            echo "::error::One-time v3.0.1 tag preparation did not complete successfully"
             exit 1
           fi
 

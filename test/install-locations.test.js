@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -24,10 +24,11 @@ test("project install reports Codex agents and Agent Skills standard locations",
       output: (line) => output.push(String(line))
     }), 0);
 
+    const project = await realpath(dir.project);
     const message = output.join("\n");
-    assert.match(message, new RegExp(`location: Codex agents \\(${escapeRegExp(join(dir.project, ".codex", "agents"))}\\)`));
-    assert.match(message, new RegExp(`location: Codex user skills \\(${escapeRegExp(join(dir.project, ".agents", "skills"))}\\)`));
-    assert.match(message, new RegExp(`${escapeRegExp(join(dir.project, ".codex", "skills", ".system"))} is reserved for bundled Codex skills`));
+    assert.match(message, new RegExp(`location: Codex agents \\(${escapeRegExp(join(project, ".codex", "agents"))}\\)`));
+    assert.match(message, new RegExp(`location: Codex user skills \\(${escapeRegExp(join(project, ".agents", "skills"))}\\)`));
+    assert.match(message, new RegExp(`${escapeRegExp(join(project, ".codex", "skills", ".system"))} is reserved for bundled Codex skills`));
   } finally {
     await dir.cleanup();
   }
@@ -43,9 +44,10 @@ test("global install reports the current user's Codex and skill locations", asyn
       output: (line) => output.push(String(line))
     }), 0);
 
+    const home = await realpath(dir.home);
     const message = output.join("\n");
-    assert.match(message, new RegExp(`location: Codex agents \\(${escapeRegExp(join(dir.home, ".codex", "agents"))}\\)`));
-    assert.match(message, new RegExp(`location: Codex user skills \\(${escapeRegExp(join(dir.home, ".agents", "skills"))}\\)`));
+    assert.match(message, new RegExp(`location: Codex agents \\(${escapeRegExp(join(home, ".codex", "agents"))}\\)`));
+    assert.match(message, new RegExp(`location: Codex user skills \\(${escapeRegExp(join(home, ".agents", "skills"))}\\)`));
   } finally {
     await dir.cleanup();
   }

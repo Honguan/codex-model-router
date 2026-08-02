@@ -89,9 +89,10 @@ test("explicit V2 install repairs a modified managed block and preserves unrelat
     assert.match(repaired, /^# unrelated-setting/m);
     assert.match(repaired, /tool_namespace = "agents"/);
     assert.doesNotMatch(repaired, /tool_namespace = "custom"/);
-    assert.notEqual(stateAfter.blockHash, stateBefore.blockHash);
+    assert.equal(stateAfter.blockHash, stateBefore.blockHash);
     assert.equal(stateAfter.scope, stateBefore.scope);
     assert.equal(stateAfter.configPath, stateBefore.configPath);
+    assert.equal(typeof stateAfter.repairedAt, "string");
     assert.match(output.join("\n"), /repair: experimental-v2 \(managed V2 block restored\)/);
   } finally {
     await dir.cleanup();

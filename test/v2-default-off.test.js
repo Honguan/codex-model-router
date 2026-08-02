@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -93,7 +93,8 @@ test("explicit V2 install repairs a modified managed block and preserves unrelat
     assert.equal(stateAfter.scope, stateBefore.scope);
     assert.equal(stateAfter.configPath, stateBefore.configPath);
     assert.equal(typeof stateAfter.repairedAt, "string");
-    assert.ok(output.includes(`repair: ${configPath} (managed V2 block restored)`));
+    const canonicalConfigPath = join(await realpath(dir.project), ".codex", "config.toml");
+    assert.ok(output.includes(`repair: ${canonicalConfigPath} (managed V2 block restored)`));
   } finally {
     await dir.cleanup();
   }

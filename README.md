@@ -6,45 +6,27 @@ Installs an evidence-first Codex workflow for Terra, Luna, and Sol while preserv
 
 ## Install
 
-From the project root:
+Project:
 
 ```sh
 npx codex-model-router@latest install
 ```
 
-Install for the current user instead:
+Current user:
 
 ```sh
 npx codex-model-router@latest install --global
 ```
 
-Restart Codex after installation. Running `install` again safely updates recognized package-managed templates while preserving user-modified files.
-
-## Configuration
-
-Normal installation keeps the current primary model unchanged and leaves multi-agent V2 disabled.
-
-Enable the package-managed V2 configuration during installation:
+Enable package-managed multi-agent V2:
 
 ```sh
 npx codex-model-router@latest install --v2
 ```
 
-Use `--global --v2` for the current user. `install --v2` enables package-managed V2; `install` without `--v2` disables an unchanged package-managed V2 block. Pre-existing, untracked, or user-modified V2 configuration is preserved rather than replaced or removed.
+Use `--global --v2` for the current user. Restart Codex after installation.
 
-Set Terra/high as the primary default:
-
-```sh
-npx codex-model-router@latest install --set-default
-```
-
-Set reasoning for all managed agents:
-
-```sh
-npx codex-model-router@latest install --agent-reasoning high
-```
-
-Set agents individually:
+## Configuration
 
 ```sh
 npx codex-model-router@latest install \
@@ -53,110 +35,79 @@ npx codex-model-router@latest install \
   --sol-reasoning medium
 ```
 
-Supported reasoning values: `none`, `low`, `medium`, `high`, `xhigh`, `max`.
+| Option | Purpose |
+| --- | --- |
+| `--set-default` | Set Terra/high as the primary default |
+| `--agent-reasoning <level>` | Set reasoning for all managed agents |
+| `--terra-reasoning <level>` | Set Terra reasoning |
+| `--luna-reasoning <level>` | Set Luna reasoning |
+| `--sol-reasoning <level>` | Set Sol reasoning |
+| `--v2` | Enable package-managed V2 |
+| `--global` | Apply the installation to the current user |
 
-All install options can be combined with `--global`.
+Reasoning values: `none`, `low`, `medium`, `high`, `xhigh`, `max`.
+
+## Visual workflow
+
+![Codex Model Router workflow overview](docs/images/workflow-overview.svg)
+
+## Roles
+
+![Codex Model Router roles](docs/images/roles.svg)
+
+## Primary-model flows
+
+### Primary = Sol
+
+![Sol primary workflow](docs/images/primary-sol.svg)
+
+### Primary = Terra
+
+![Terra primary workflow](docs/images/primary-terra.svg)
+
+### Primary = Luna
+
+![Luna primary workflow](docs/images/primary-luna.svg)
+
+## Core rules
+
+- The same model is not spawned twice in one workflow.
+- A matching primary model performs that role in the primary thread.
+- Luna is the only writable role.
+- Terra plans and independently verifies.
+- Sol joins only after a non-PASS verification result.
+- The final response always returns through the primary model.
+
+## V2
+
+```text
+install --v2  → enable package-managed V2
+install       → disable unchanged package-managed V2
+uninstall     → remove the router and unchanged managed V2
+```
+
+Pre-existing, untracked, or user-modified V2 configuration is preserved.
 
 ## Remove
 
-Remove the project installation:
+Project:
 
 ```sh
 npx codex-model-router@latest uninstall
 ```
 
-Remove the user installation:
+Current user:
 
 ```sh
 npx codex-model-router@latest uninstall --global
 ```
 
-Only unchanged package-managed files, settings, and V2 blocks are removed. User-modified files and unrelated configuration are preserved.
-
-## Workflow
-
-![Codex Model Router workflow](docs/model-router-workflow.svg)
-
-For nontrivial code changes:
-
-```text
-Primary model confirms the requirement
-→ Luna reads requirements, rules, relevant code, callers, and dependencies
-→ Luna returns one self-contained REQUIREMENT_EVIDENCE package
-→ Terra writes or updates PLAN.md
-→ the same Luna role reads the complete plan and implements it
-→ Terra verifies requirement satisfaction and plan conformance
-→ PASS returns the verified result to the primary model
-→ non-PASS escalates to Sol
-→ Sol diagnoses the failure and revises affected PLAN.md sections
-→ the same Luna role reimplements the affected scope
-→ Terra performs final verification
-→ the primary model replies to the user
-```
-
-The full workflow is not started for ordinary questions, explanations, read-only analysis, or unclear requirements. The primary model handles those cases directly and asks for clarification before code-changing work when necessary.
-
-## Roles
-
-| Role | Model | Default reasoning | Access | Responsibility |
-| --- | --- | --- | --- | --- |
-| Primary | User selected | User selected | Existing setting | Conversation, clarification, coordination, final reply |
-| Luna | `gpt-5.6-luna` | `xhigh` | `workspace-write` | Requirement evidence and implementation |
-| Terra | `gpt-5.6-terra` | `high` | `read-only` | Planning and independent verification |
-| Sol | `gpt-5.6-sol` | `medium` | `read-only` | Failed-verification analysis and plan revision |
-
-Luna is the only writable role. Luna cannot make architecture decisions or self-approve. Terra and Sol never edit implementation files.
-
-### No duplicate same-model agents
-
-One model uses one stable role identity throughout a workflow:
-
-- Luna primary performs Luna reading and implementation in the primary thread.
-- Terra primary performs Terra planning and verification in the primary thread.
-- Sol primary performs Sol escalation and replanning in the primary thread.
-- A matching-model subagent is never spawned again for a later stage.
-- Unknown primary identity is not guessed: use one Luna agent, one Terra agent, and only after non-PASS one Sol agent.
-
-This reduces repeated context transfer and input-token usage.
-
-## Planning and verification
-
-Luna records confirmed requirements, constraints, files, symbols, current and required behavior, direct flow, invariants, unknowns, and evidence locations.
-
-Terra marks plan information as `CONFIRMED`, `PROPOSED`, or `UNKNOWN`. Implementation cannot start while an unknown can change behavior, targets, contracts, parameter flow, control flow, callers, or compatibility.
-
-Terra returns one verdict:
-
-- `PASS`
-- `FAIL_IMPLEMENTATION`
-- `FAIL_PLAN`
-- `EVIDENCE_GAP`
-- `REQUIREMENT_CLARIFICATION`
-
-Any non-PASS result includes evidence for Sol. One correction loop is preferred, with at most three implementation-verification cycles unless new evidence or a changed user decision appears.
-
-## Managed files
-
-```text
-.codex/config.toml                              # only with --set-default or --v2
-.codex/agents/terra.toml
-.codex/agents/luna.toml
-.codex/agents/sol.toml
-.codex/model-router-state.json
-.codex/model-router-v2-state.json               # only with --v2
-.codex/config.toml.codex-model-router.bak       # only when needed
-.agents/skills/model-router/SKILL.md
-.agents/skills/implementation-planning/SKILL.md
-```
-
 ## Safety
 
-- Preserves unrelated TOML settings, comments, BOM, ordering, and LF/CRLF.
-- Rejects malformed, non-UTF-8, unsafe, symlinked, or junction-redirected managed paths.
-- Uses scope locking, atomic transactions, rollback, and conflict-safe recovery.
-- Restores package-managed primary and V2 settings during uninstall when unchanged.
+- Preserves unrelated TOML, comments, BOM, ordering, and LF/CRLF.
+- Uses path validation, scope locking, atomic transactions, and rollback.
 - Never overwrites user-modified managed files.
-- Never changes `AGENTS.md`, shell profiles, editor settings, hooks, MCP servers, telemetry, accounts, or environment variables.
+- Never changes `AGENTS.md`, shell profiles, editor settings, hooks, MCP servers, accounts, telemetry, or environment variables.
 
 ## Requirements
 

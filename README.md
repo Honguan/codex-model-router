@@ -1,32 +1,34 @@
 # codex-model-router
 
-Installs an evidence-first Codex workflow for Terra, Luna, and Sol while preserving the user's primary model and unrelated Codex configuration.
+[繁體中文](README.md)｜[English](README.en.md)
 
-> Routing is advisory. Codex reads the installed agents and skills and decides when to delegate. This package does not intercept prompts or guarantee a hard model switch.
+安裝一套以證據為優先的 Codex 工作流程，由 Terra、Luna 與 Sol 分工，同時保留使用者選擇的主模型與其他無關的 Codex 設定。
 
-## Install
+> 路由屬於建議性機制。Codex 會讀取已安裝的代理與技能，再自行決定何時委派。本套件不攔截提示詞，也不保證強制切換模型。
 
-Project:
+## 安裝
+
+安裝到目前專案：
 
 ```sh
 npx codex-model-router@latest install
 ```
 
-Current user:
+安裝到目前使用者：
 
 ```sh
 npx codex-model-router@latest install --global
 ```
 
-Enable package-managed multi-agent V2:
+啟用套件管理的多代理 V2：
 
 ```sh
 npx codex-model-router@latest install --v2
 ```
 
-Use `--global --v2` for the current user. Restart Codex after installation.
+目前使用者範圍請搭配 `--global --v2`。安裝完成後重新啟動 Codex。
 
-## Configuration
+## 設定
 
 ```sh
 npx codex-model-router@latest install \
@@ -35,85 +37,116 @@ npx codex-model-router@latest install \
   --sol-reasoning medium
 ```
 
-| Option | Purpose |
+| 選項 | 用途 |
 | --- | --- |
-| `--set-default` | Set Terra/high as the primary default |
-| `--agent-reasoning <level>` | Set reasoning for all managed agents |
-| `--terra-reasoning <level>` | Set Terra reasoning |
-| `--luna-reasoning <level>` | Set Luna reasoning |
-| `--sol-reasoning <level>` | Set Sol reasoning |
-| `--v2` | Enable package-managed V2 |
-| `--global` | Apply the installation to the current user |
+| `--set-default` | 將 Terra／high 設為預設主模型 |
+| `--agent-reasoning <level>` | 設定全部受管理代理的思考等級 |
+| `--terra-reasoning <level>` | 設定 Terra 思考等級 |
+| `--luna-reasoning <level>` | 設定 Luna 思考等級 |
+| `--sol-reasoning <level>` | 設定 Sol 思考等級 |
+| `--v2` | 啟用套件管理的 V2 |
+| `--global` | 套用到目前使用者 |
 
-Reasoning values: `none`, `low`, `medium`, `high`, `xhigh`, `max`.
+可用思考等級：`none`、`low`、`medium`、`high`、`xhigh`、`max`。
 
-## Visual workflow
+## 圖解說明
 
-![Codex Model Router workflow overview](docs/images/workflow-overview.png)
+所有圖表預設摺疊，點擊標題後展開。
 
-## Roles
+<details>
+<summary><strong>角色、模型、權限與職責</strong></summary>
 
-![Codex Model Router roles](docs/images/roles.png)
+![Codex Model Router 角色圖](docs/images/zh-TW/roles.svg)
 
-## Primary-model flows
+</details>
 
-### Primary = Sol
+<details>
+<summary><strong>標準主流程總覽</strong></summary>
 
-![Sol primary workflow](docs/images/primary-sol.png)
+![Codex Model Router 主流程總覽](docs/images/zh-TW/workflow-overview.svg)
 
-### Primary = Terra
+</details>
 
-![Terra primary workflow](docs/images/primary-terra.png)
+<details>
+<summary><strong>模型使用占比估算</strong></summary>
 
-### Primary = Luna
+![模型使用占比估算](docs/images/zh-TW/model-usage-share.svg)
 
-![Luna primary workflow](docs/images/primary-luna.png)
+</details>
 
-## Core rules
+<details>
+<summary><strong>流程外的主模型問答情境</strong></summary>
 
-- The same model is not spawned twice in one workflow.
-- A matching primary model performs that role in the primary thread.
-- Luna is the only writable role.
-- Terra plans and independently verifies.
-- Sol joins only after a non-PASS verification result.
-- The final response always returns through the primary model.
+![主模型問答情境](docs/images/zh-TW/primary-qa-scenarios.svg)
 
-## V2
+</details>
+
+<details>
+<summary><strong>情境 A：主模型為 Sol</strong></summary>
+
+![主模型為 Sol 的工作流程](docs/images/zh-TW/primary-sol.svg)
+
+</details>
+
+<details>
+<summary><strong>情境 B：主模型為 Terra</strong></summary>
+
+![主模型為 Terra 的工作流程](docs/images/zh-TW/primary-terra.svg)
+
+</details>
+
+<details>
+<summary><strong>情境 C：主模型為 Luna</strong></summary>
+
+![主模型為 Luna 的工作流程](docs/images/zh-TW/primary-luna.svg)
+
+</details>
+
+## 核心規則
+
+- 同一個工作流程不重複啟動相同模型代理。
+- 主模型與代理角色相同時，由主線程直接完成該角色工作。
+- Luna 是唯一可寫入的角色。
+- Terra 負責企劃與獨立驗證。
+- Sol 僅在驗證結果不是 PASS 時介入。
+- 最終回覆一律回到主模型。
+
+## V2 行為
 
 ```text
-install --v2  → enable package-managed V2
-install       → disable unchanged package-managed V2
-uninstall     → remove the router and unchanged managed V2
+install --v2  → 啟用套件管理的 V2
+install       → 停用未被修改的套件管理 V2
+uninstall     → 移除路由器與未被修改的受管理 V2
 ```
 
-Pre-existing, untracked, or user-modified V2 configuration is preserved.
+既有、未追蹤或由使用者修改過的 V2 設定都會保留。
 
-## Remove
+## 移除
 
-Project:
+從目前專案移除：
 
 ```sh
 npx codex-model-router@latest uninstall
 ```
 
-Current user:
+從目前使用者移除：
 
 ```sh
 npx codex-model-router@latest uninstall --global
 ```
 
-## Safety
+## 安全性
 
-- Preserves unrelated TOML, comments, BOM, ordering, and LF/CRLF.
-- Uses path validation, scope locking, atomic transactions, and rollback.
-- Never overwrites user-modified managed files.
-- Never changes `AGENTS.md`, shell profiles, editor settings, hooks, MCP servers, accounts, telemetry, or environment variables.
+- 保留無關的 TOML、註解、BOM、排序與 LF／CRLF。
+- 使用路徑驗證、範圍鎖定、原子交易與回滾。
+- 不覆寫使用者已修改的受管理檔案。
+- 不修改 `AGENTS.md`、Shell Profile、編輯器設定、Hooks、MCP 伺服器、帳號、遙測或環境變數。
 
-## Requirements
+## 系統需求
 
-- Node.js 18 or newer.
-- Codex with custom-agent and local-skill support.
-- Access to `gpt-5.6-terra`, `gpt-5.6-luna`, and `gpt-5.6-sol`.
-- Windows, Linux, or macOS.
+- Node.js 18 以上。
+- 支援自訂代理與本機技能的 Codex。
+- 可使用 `gpt-5.6-terra`、`gpt-5.6-luna` 與 `gpt-5.6-sol`。
+- Windows、Linux 或 macOS。
 
-Security issues: see [SECURITY.md](SECURITY.md). Maintainer release steps: see [MAINTAINERS.md](MAINTAINERS.md).
+安全性問題請參閱 [SECURITY.md](SECURITY.md)。維護者發佈流程請參閱 [MAINTAINERS.md](MAINTAINERS.md)。

@@ -1,4 +1,4 @@
-name: Dispatch v3.0.1 Release
+name: Inspect v3.0.1 Publication
 
 on:
   pull_request:
@@ -8,15 +8,15 @@ on:
       - release-trigger-v3.0.1.txt
 
 permissions:
-  actions: write
+  actions: read
   contents: read
 
 jobs:
-  dispatch:
+  inspect:
     if: github.head_ref == 'release/trigger-v3.0.1'
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch the validated release workflow
+      - name: Show recent release workflow runs
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run release.yml --repo Honguan/codex-model-router --ref main -f tag=v3.0.1 -f action=prepare-and-release
+        run: gh run list --repo Honguan/codex-model-router --workflow release.yml --limit 5 --json databaseId,status,conclusion,event,createdAt,url,headSha,displayTitle

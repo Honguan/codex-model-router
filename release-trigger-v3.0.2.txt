@@ -1,1 +1,1 @@
-Trigger the validated v3.0.2 release workflow.
+Inspect the v3.0.2 npm publication and GitHub Release status.

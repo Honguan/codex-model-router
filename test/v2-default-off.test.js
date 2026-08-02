@@ -60,6 +60,44 @@ test("plain install preserves user-modified V2 and reports that it could not dis
   }
 });
 
+test("explicit V2 install repairs a modified managed block and preserves unrelated TOML", async () => {
+  const dir = await fixture();
+  try {
+    const output = [];
+    const options = {
+      cwd: dir.project,
+      home: dir.home,
+      output: (line) => output.push(String(line))
+    };
+    assert.equal(await runCli(["install", "--v2"], options), 0);
+
+    const configPath = join(dir.project, ".codex", "config.toml");
+    const statePath = join(dir.project, ".codex", "model-router-v2-state.json");
+    const original = await readFile(configPath, "utf8");
+    const stateBefore = JSON.parse(await readFile(statePath, "utf8"));
+    await writeFile(
+      configPath,
+      `# unrelated-setting\n${original.replace('tool_namespace = "agents"', 'tool_namespace = "custom"')}`,
+      "utf8"
+    );
+
+    output.length = 0;
+    assert.equal(await runCli(["install", "--v2"], options), 0);
+
+    const repaired = await readFile(configPath, "utf8");
+    const stateAfter = JSON.parse(await readFile(statePath, "utf8"));
+    assert.match(repaired, /^# unrelated-setting/m);
+    assert.match(repaired, /tool_namespace = "agents"/);
+    assert.doesNotMatch(repaired, /tool_namespace = "custom"/);
+    assert.notEqual(stateAfter.blockHash, stateBefore.blockHash);
+    assert.equal(stateAfter.scope, stateBefore.scope);
+    assert.equal(stateAfter.configPath, stateBefore.configPath);
+    assert.match(output.join("\n"), /repair: experimental-v2 \(managed V2 block restored\)/);
+  } finally {
+    await dir.cleanup();
+  }
+});
+
 test("V2 install validates scope before reading existing global state", async () => {
   const dir = await fixture();
   try {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.0 - 2026-08-02
+
+- Add the evidence-first `Primary -> Luna evidence -> Terra plan -> Luna implementation -> Terra verification` workflow.
+- Escalate non-PASS verification to read-only Sol plan revision, followed by Luna reimplementation and final Terra verification.
+- Reuse the primary thread when its model matches Luna, Terra, or Sol, and never spawn duplicate same-model agents in one workflow.
+- Keep Luna as the only workspace-write role while Terra and Sol remain read-only.
+- Reduce the public CLI to `install`, `uninstall`, `--help`, `--version`, and install configuration options.
+- Remove `enable`, `disable`, `status`, `doctor`, `--dry-run`, `adopt`, `repair`, experimental V2 commands, and compatibility aliases.
+- Simplify README installation, configuration, removal, workflow, and safety guidance while retaining the workflow diagram.
+- Preserve safe managed-template migration, path validation, locking, atomic transactions, rollback, configuration restoration, and user-modified file protection.
+
 ## 2.4.2 - 2026-08-02
 
 - Safely migrate exact legacy home-directory Project Scope state to Global Scope during explicit global lifecycle commands.
@@ -91,14 +102,10 @@
 - Change Sol from read-only review to `workspace-write` review and implementation when explicitly delegated.
 - Preserve review-first routing while allowing Sol to apply confirmed high-risk fixes.
 - Add safe migration from managed 1.0.0 Sol and skill templates.
-- Add npm publication metadata and concise publishing instructions.
+- Improve npm publication metadata and concise publishing instructions.
 
 ## 1.0.0 - 2026-07-31
 
 - Safely patch real-world Codex TOML while preserving comments, BOM, and line endings.
 - Add reversible `--set-default` support for Terra/high.
 - Add idempotent install and uninstall state cleanup.
-- Expand `doctor` validation for config, agents, skill, backup, hashes, and unsafe paths.
-- Add zero-write `--dry-run` previews.
-- Add Windows, Linux, and macOS CI plus packed-package smoke tests.
-- Document project/global installation, manual overrides, recovery, and routing limits.

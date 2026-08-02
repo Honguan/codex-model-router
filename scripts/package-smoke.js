@@ -22,32 +22,36 @@ try {
   await mkdir(project, { recursive: true });
   await runNpm(["init", "-y"], { cwd: project });
   await runNpm(["install", "--no-audit", "--no-fund", "--ignore-scripts", tarball], { cwd: project });
+
   const binary = join(project, "node_modules", "codex-model-router", "bin", "codex-model-router.js");
   const version = await exec(process.execPath, [binary, "--version"], { cwd: project });
   assert.equal(version.stdout.trim(), packageJson.version);
 
   const help = await exec(process.execPath, [binary, "--help"], { cwd: project });
-  assert.match(help.stdout, /npx codex-model-router enable/);
-  assert.match(help.stdout, /npx codex-model-router disable/);
-  assert.match(help.stdout, /npx codex-model-router status/);
+  assert.match(help.stdout, /npx codex-model-router install/);
+  assert.match(help.stdout, /npx codex-model-router uninstall/);
+  assert.match(help.stdout, /--set-default/);
+  assert.doesNotMatch(help.stdout, /\benable\b/);
+  assert.doesNotMatch(help.stdout, /\bstatus\b/);
+  assert.doesNotMatch(help.stdout, /--dry-run/);
 
-  await exec(process.execPath, [binary, "enable"], { cwd: project });
-  await exec(process.execPath, [binary, "status"], { cwd: project });
+  await assert.rejects(
+    exec(process.execPath, [binary, "install", "--dry-run"], { cwd: project }),
+    /Command failed/
+  );
+  await assert.rejects(access(join(project, ".codex")));
+
+  await exec(process.execPath, [binary, "install"], { cwd: project });
   await assert.rejects(access(join(project, ".codex", "config.toml")));
   assert.match(await readFile(join(project, ".codex", "agents", "terra.toml"), "utf8"), /gpt-5\.6-terra/);
   assert.match(await readFile(join(project, ".codex", "agents", "luna.toml"), "utf8"), /model_reasoning_effort = "xhigh"/);
   assert.match(await readFile(join(project, ".codex", "agents", "sol.toml"), "utf8"), /sandbox_mode = "read-only"/);
-  assert.match(await readFile(join(project, ".agents", "skills", "implementation-planning", "SKILL.md"), "utf8"), /LOCAL_CHOICE/);
+  assert.match(await readFile(join(project, ".agents", "skills", "model-router", "SKILL.md"), "utf8"), /REQUIREMENT_EVIDENCE/);
+  assert.match(await readFile(join(project, ".agents", "skills", "implementation-planning", "SKILL.md"), "utf8"), /EVIDENCE_VERSION/);
 
-  await exec(process.execPath, [binary, "v2", "enable"], { cwd: project });
-  const v2Config = await readFile(join(project, ".codex", "config.toml"), "utf8");
-  assert.match(v2Config, /\[features\.multi_agent_v2\]/);
-  assert.match(v2Config, /tool_namespace = "agents"/);
-  await exec(process.execPath, [binary, "v2", "status"], { cwd: project });
-
-  await exec(process.execPath, [binary, "disable"], { cwd: project });
-  await assert.rejects(access(join(project, ".codex", "config.toml")));
-  await assert.rejects(access(join(project, ".codex", "model-router-v2-state.json")));
+  await exec(process.execPath, [binary, "uninstall"], { cwd: project });
+  await assert.rejects(access(join(project, ".codex")));
+  await assert.rejects(access(join(project, ".agents")));
   await rm(tarball, { force: true });
 } finally {
   await rm(temporary, { recursive: true, force: true });

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.1 - 2026-08-02
+
+- Allow explicit global lifecycle commands to run from the user home directory.
+- Keep project-scope commands from treating the user home directory as a valid project root.
+- Preserve protection against genuine project/global overlap caused by a custom `CODEX_HOME`.
+- Add regression coverage for global enable, status, repair, V2 status, disable, and actionable project-scope errors.
+
 ## 2.4.0 - 2026-08-02
 
 - Add primary-model-aware role inlining so Terra, Luna, and Sol primaries avoid redundant same-model subagents when their identity is available.

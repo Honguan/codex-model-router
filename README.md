@@ -28,6 +28,15 @@ npx codex-model-router@latest install --v2
 
 目前使用者範圍請搭配 `--global --v2`。安裝完成後重新啟動 Codex。
 
+### Codex 安裝位置
+
+| 範圍 | 代理定義 | 使用者技能 |
+| --- | --- | --- |
+| 專案 | `<專案>/.codex/agents` | `<專案>/.agents/skills` |
+| 目前使用者 | `~/.codex/agents` | `~/.agents/skills` |
+
+`~/.agents/skills` 是 Codex 使用者技能位置。`~/.codex/skills/.system` 只放 Codex 內建技能；該資料夾只有 `.system` 屬於正常情況，不應把本套件的自訂技能複製進去。安裝完成後，CLI 會直接顯示實際代理與技能路徑。
+
 ## 設定
 
 ```sh
@@ -44,7 +53,7 @@ npx codex-model-router@latest install \
 | `--terra-reasoning <level>` | 設定 Terra 思考等級 |
 | `--luna-reasoning <level>` | 設定 Luna 思考等級 |
 | `--sol-reasoning <level>` | 設定 Sol 思考等級 |
-| `--v2` | 啟用套件管理的 V2 |
+| `--v2` | 啟用或修復套件管理的 V2 |
 | `--global` | 套用到目前使用者 |
 
 可用思考等級：`none`、`low`、`medium`、`high`、`xhigh`、`max`。
@@ -114,12 +123,12 @@ npx codex-model-router@latest install \
 ## V2 行為
 
 ```text
-install --v2  → 啟用套件管理的 V2
+install --v2  → 啟用 V2；已追蹤的標記區塊被修改時自動修復
 install       → 停用未被修改的套件管理 V2
 uninstall     → 移除路由器與未被修改的受管理 V2
 ```
 
-既有、未追蹤或由使用者修改過的 V2 設定都會保留。
+再次明確執行 `install --v2` 時，若套件狀態仍存在且只有套件標記內的 V2 內容被修改，安裝器只會重建該標記區塊、更新雜湊並保留其他 TOML。既有未受管理、缺少狀態、標記不完整或標記重複的 V2 設定仍會保留並停止操作，避免誤覆寫。
 
 ## 移除
 
@@ -139,7 +148,7 @@ npx codex-model-router@latest uninstall --global
 
 - 保留無關的 TOML、註解、BOM、排序與 LF／CRLF。
 - 使用路徑驗證、範圍鎖定、原子交易與回滾。
-- 不覆寫使用者已修改的受管理檔案。
+- 除了明確執行 `install --v2` 時重建套件標記的 V2 區塊，不覆寫其他使用者修改的受管理檔案。
 - 不修改 `AGENTS.md`、Shell Profile、編輯器設定、Hooks、MCP 伺服器、帳號、遙測或環境變數。
 
 ## 系統需求

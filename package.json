@@ -1,6 +1,6 @@
 {
   "name": "codex-model-router",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "Install a safe evidence-first Codex workflow for Terra, Luna, and Sol.",
   "type": "module",
   "bin": {

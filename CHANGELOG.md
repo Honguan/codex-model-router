@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.4 - 2026-08-02
+
+- Repair a changed package-managed V2 marker block when `install --v2` is explicitly requested again.
+- Preserve all TOML outside the marked V2 block while updating the managed state hash atomically.
+- Continue preserving modified V2 during plain `install` and `uninstall` when repair was not explicitly requested.
+- Print the resolved Codex agent and user-skill installation paths after a successful install.
+- Clarify that custom Codex skills belong in `.agents/skills` while `.codex/skills/.system` is reserved for bundled skills.
+- Add project and global regression coverage for V2 repair and installation-path reporting.
+
 ## 3.0.3 - 2026-08-02
 
 - Validate project and global scope before V2 reads its managed state file.

@@ -28,6 +28,15 @@ npx codex-model-router@latest install --v2
 
 Use `--global --v2` for the current user. Restart Codex after installation.
 
+### Codex installation locations
+
+| Scope | Agent definitions | User skills |
+| --- | --- | --- |
+| Project | `<project>/.codex/agents` | `<project>/.agents/skills` |
+| Current user | `~/.codex/agents` | `~/.agents/skills` |
+
+`~/.agents/skills` is the Codex user-skill location. `~/.codex/skills/.system` is reserved for bundled Codex skills; seeing only `.system` there is normal, and custom package skills should not be copied into it. The CLI prints the resolved agent and skill locations after installation.
+
 ## Configuration
 
 ```sh
@@ -44,7 +53,7 @@ npx codex-model-router@latest install \
 | `--terra-reasoning <level>` | Set Terra reasoning |
 | `--luna-reasoning <level>` | Set Luna reasoning |
 | `--sol-reasoning <level>` | Set Sol reasoning |
-| `--v2` | Enable package-managed V2 |
+| `--v2` | Enable or repair package-managed V2 |
 | `--global` | Apply the installation to the current user |
 
 Reasoning values: `none`, `low`, `medium`, `high`, `xhigh`, `max`.
@@ -114,12 +123,12 @@ All diagrams are collapsed by default. Select a heading to expand it.
 ## V2
 
 ```text
-install --v2  → enable package-managed V2
+install --v2  → enable V2; repair a modified tracked marker block
 install       → disable unchanged package-managed V2
 uninstall     → remove the router and unchanged managed V2
 ```
 
-Pre-existing, untracked, or user-modified V2 configuration is preserved.
+When `install --v2` is explicitly run again and package state still exists, a changed package-marked V2 block is rebuilt in place, its hash is updated, and unrelated TOML is preserved. Pre-existing unmanaged V2, missing state, incomplete markers, or duplicate markers remain preserved and stop the operation to prevent accidental overwrites.
 
 ## Remove
 
@@ -139,7 +148,7 @@ npx codex-model-router@latest uninstall --global
 
 - Preserves unrelated TOML, comments, BOM, ordering, and LF/CRLF.
 - Uses path validation, scope locking, atomic transactions, and rollback.
-- Never overwrites user-modified managed files.
+- Except for rebuilding the package-marked V2 block after an explicit `install --v2`, it never overwrites other user-modified managed files.
 - Never changes `AGENTS.md`, shell profiles, editor settings, hooks, MCP servers, accounts, telemetry, or environment variables.
 
 ## Requirements

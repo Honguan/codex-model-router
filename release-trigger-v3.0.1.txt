@@ -1,1 +1,1 @@
-Retry the validated v3.0.1 release workflow.
+Inspect the validated v3.0.1 release workflow status.

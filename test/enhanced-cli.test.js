@@ -34,11 +34,11 @@ test("default reasoning is warning-free and weak profiles use stable warning cod
   );
 });
 
-test("overlapping project and global Codex roots are rejected before writes", async () => {
+test("overlapping project and global Codex roots are rejected before project writes", async () => {
   const dir = await fixture();
   try {
     const lines = [];
-    const result = await runCli(["enable", "--global", "--dry-run"], {
+    const result = await runCli(["enable", "--dry-run"], {
       cwd: dir.project,
       home: dir.home,
       env: { CODEX_HOME: join(dir.project, ".codex") },

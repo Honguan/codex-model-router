@@ -1,0 +1,4 @@
+# Files managed locally by codex-settings
+/AGENTS.md
+/.codex/rules/default.rules
+/.codex-settings-manifest.json

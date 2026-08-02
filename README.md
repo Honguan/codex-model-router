@@ -49,25 +49,25 @@ Reasoning values: `none`, `low`, `medium`, `high`, `xhigh`, `max`.
 
 ## Visual workflow
 
-![Codex Model Router workflow overview](docs/images/workflow-overview.svg)
+![Codex Model Router workflow overview](docs/images/workflow-overview.webp)
 
 ## Roles
 
-![Codex Model Router roles](docs/images/roles.svg)
+![Codex Model Router roles](docs/images/roles.webp)
 
 ## Primary-model flows
 
 ### Primary = Sol
 
-![Sol primary workflow](docs/images/primary-sol.svg)
+![Sol primary workflow](docs/images/primary-sol.webp)
 
 ### Primary = Terra
 
-![Terra primary workflow](docs/images/primary-terra.svg)
+![Terra primary workflow](docs/images/primary-terra.webp)
 
 ### Primary = Luna
 
-![Luna primary workflow](docs/images/primary-luna.svg)
+![Luna primary workflow](docs/images/primary-luna.webp)
 
 ## Core rules
 

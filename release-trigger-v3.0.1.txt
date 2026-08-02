@@ -1,1 +1,1 @@
-Dispatch the validated v3.0.1 release workflow after restoring release.yml.
+Inspect the v3.0.1 npm publication and GitHub Release status.

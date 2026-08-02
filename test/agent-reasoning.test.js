@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { runCli } from "../lib/cli.js";
+import { runCli } from "../lib/cli-v2.js";
 
 const quiet = () => {};
 
@@ -33,7 +33,7 @@ async function agentReasoning(root, name) {
   return match[1];
 }
 
-test("install uses the default role profile and uninstall removes unchanged managed files", async () => {
+test("install uses the default role profile and keeps V2 disabled unless requested", async () => {
   const dir = await fixture();
   try {
     const options = { cwd: dir.project, home: dir.home, output: quiet };
@@ -41,9 +41,43 @@ test("install uses the default role profile and uninstall removes unchanged mana
     assert.equal(await agentReasoning(dir.project, "terra"), "high");
     assert.equal(await agentReasoning(dir.project, "luna"), "xhigh");
     assert.equal(await agentReasoning(dir.project, "sol"), "medium");
+    assert.equal(await exists(join(dir.project, ".codex", "model-router-v2-state.json")), false);
+    assert.equal(await exists(join(dir.project, ".codex", "config.toml")), false);
     assert.equal(await runCli(["uninstall"], options), 0);
     assert.equal(await exists(join(dir.project, ".codex")), false);
     assert.equal(await exists(join(dir.project, ".agents")), false);
+  } finally {
+    await dir.cleanup();
+  }
+});
+
+test("install --v2 enables managed V2 and uninstall removes it", async () => {
+  const dir = await fixture();
+  try {
+    const options = { cwd: dir.project, home: dir.home, output: quiet };
+    assert.equal(await runCli(["install", "--v2"], options), 0);
+    const config = await readFile(join(dir.project, ".codex", "config.toml"), "utf8");
+    assert.match(config, /\[features\.multi_agent_v2\]/);
+    assert.match(config, /tool_namespace = "agents"/);
+    assert.equal(await exists(join(dir.project, ".codex", "model-router-v2-state.json")), true);
+    assert.equal(await runCli(["uninstall"], options), 0);
+    assert.equal(await exists(join(dir.project, ".codex")), false);
+  } finally {
+    await dir.cleanup();
+  }
+});
+
+test("uninstall preserves user-modified managed V2 content", async () => {
+  const dir = await fixture();
+  try {
+    const options = { cwd: dir.project, home: dir.home, output: quiet };
+    assert.equal(await runCli(["install", "--v2"], options), 0);
+    const configPath = join(dir.project, ".codex", "config.toml");
+    const config = await readFile(configPath, "utf8");
+    await writeFile(configPath, config.replace('tool_namespace = "agents"', 'tool_namespace = "custom"'), "utf8");
+    assert.equal(await runCli(["uninstall"], options), 1);
+    assert.match(await readFile(configPath, "utf8"), /tool_namespace = "custom"/);
+    assert.equal(await exists(join(dir.project, ".codex", "model-router-v2-state.json")), true);
   } finally {
     await dir.cleanup();
   }
@@ -92,6 +126,7 @@ test("invalid reasoning and removed public controls are rejected before writes",
     const calls = [
       ["install", "--luna-reasoning", "ultra"],
       ["install", "--dry-run"],
+      ["uninstall", "--v2"],
       ["enable"],
       ["disable"],
       ["status"],
@@ -107,7 +142,7 @@ test("invalid reasoning and removed public controls are rejected before writes",
         home: dir.home,
         output: (line) => lines.push(String(line))
       }), 1, argv.join(" "));
-      assert.ok(lines.some((line) => /unsupported/.test(line)), argv.join(" "));
+      assert.ok(lines.some((line) => /unsupported|only for install/.test(line)), argv.join(" "));
       assert.equal(await exists(join(dir.project, ".codex")), false);
     }
   } finally {
@@ -115,12 +150,13 @@ test("invalid reasoning and removed public controls are rejected before writes",
   }
 });
 
-test("global install and uninstall work from the user home", async () => {
+test("global install with V2 and uninstall work from the user home", async () => {
   const dir = await fixture();
   try {
     const options = { cwd: dir.home, home: dir.home, output: quiet };
-    assert.equal(await runCli(["install", "--global"], options), 0);
+    assert.equal(await runCli(["install", "--global", "--v2"], options), 0);
     assert.equal(await exists(join(dir.home, ".codex", "agents", "terra.toml")), true);
+    assert.equal(await exists(join(dir.home, ".codex", "model-router-v2-state.json")), true);
     assert.equal(await runCli(["uninstall", "--global"], options), 0);
     assert.equal(await exists(join(dir.home, ".codex")), false);
     assert.equal(await exists(join(dir.home, ".agents")), false);
@@ -129,7 +165,7 @@ test("global install and uninstall work from the user home", async () => {
   }
 });
 
-test("help exposes only install, uninstall, and configuration options", async () => {
+test("help exposes install-only V2 and no removed lifecycle commands", async () => {
   const lines = [];
   assert.equal(await runCli(["--help"], { output: (line) => lines.push(String(line)) }), 0);
   const help = lines.join("\n");
@@ -137,8 +173,10 @@ test("help exposes only install, uninstall, and configuration options", async ()
   assert.match(help, /npx codex-model-router uninstall/);
   assert.match(help, /--set-default/);
   assert.match(help, /--terra-reasoning/);
+  assert.match(help, /--v2/);
+  assert.match(help, /disabled by default/);
+  assert.doesNotMatch(help, /\bv2 enable\b/);
   assert.doesNotMatch(help, /\benable\b/);
-  assert.doesNotMatch(help, /\bdisable\b/);
   assert.doesNotMatch(help, /\bdoctor\b/);
   assert.doesNotMatch(help, /--dry-run/);
 });

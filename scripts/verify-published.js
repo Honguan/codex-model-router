@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -44,12 +44,20 @@ async function main() {
     const help = await invoke("--help");
     assert.match(help.stdout, /npx codex-model-router install/);
     assert.match(help.stdout, /npx codex-model-router uninstall/);
+    assert.match(help.stdout, /--v2/);
+    assert.match(help.stdout, /disabled by default/);
     assert.doesNotMatch(help.stdout, /--dry-run/);
+    assert.doesNotMatch(help.stdout, /\bv2 enable\b/);
 
     await assert.rejects(invoke("enable"), /Command failed/);
-    await invoke("install", "--set-default");
+    await invoke("install", "--set-default", "--v2");
+    const enabled = await readFile(join(project, ".codex", "config.toml"), "utf8");
+    assert.match(enabled, /\[features\.multi_agent_v2\]/);
+    await access(join(project, ".codex", "model-router-v2-state.json"));
+
     await invoke("uninstall");
     assert.equal(await readFile(join(project, ".codex", "config.toml"), "utf8"), original);
+    await assert.rejects(access(join(project, ".codex", "model-router-v2-state.json")));
 
     console.log(`Verified ${name}@${version} from the public npm registry`);
   } finally {

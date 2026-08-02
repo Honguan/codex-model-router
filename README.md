@@ -22,7 +22,15 @@ Restart Codex after installation. Running `install` again safely updates recogni
 
 ## Configuration
 
-Normal installation keeps the current primary model unchanged.
+Normal installation keeps the current primary model unchanged and leaves multi-agent V2 disabled.
+
+Enable the package-managed V2 configuration during installation:
+
+```sh
+npx codex-model-router@latest install --v2
+```
+
+Use `--global --v2` for the current user. Without `--v2`, a fresh installation does not enable V2. Pre-existing or user-modified V2 configuration is preserved rather than replaced.
 
 Set Terra/high as the primary default:
 
@@ -47,7 +55,7 @@ npx codex-model-router@latest install \
 
 Supported reasoning values: `none`, `low`, `medium`, `high`, `xhigh`, `max`.
 
-Options can be combined with `--global`.
+All install options can be combined with `--global`.
 
 ## Remove
 
@@ -63,7 +71,7 @@ Remove the user installation:
 npx codex-model-router@latest uninstall --global
 ```
 
-Only unchanged package-managed files and settings are removed. User-modified files and unrelated configuration are preserved.
+Only unchanged package-managed files, settings, and V2 blocks are removed. User-modified files and unrelated configuration are preserved.
 
 ## Workflow
 
@@ -103,9 +111,9 @@ Luna is the only writable role. Luna cannot make architecture decisions or self-
 
 One model uses one stable role identity throughout a workflow:
 
-- Luna primary: performs Luna reading and implementation in the primary thread.
-- Terra primary: performs Terra planning and verification in the primary thread.
-- Sol primary: performs Sol escalation and replanning in the primary thread.
+- Luna primary performs Luna reading and implementation in the primary thread.
+- Terra primary performs Terra planning and verification in the primary thread.
+- Sol primary performs Sol escalation and replanning in the primary thread.
 - A matching-model subagent is never spawned again for a later stage.
 - Unknown primary identity is not guessed: use one Luna agent, one Terra agent, and only after non-PASS one Sol agent.
 
@@ -130,11 +138,12 @@ Any non-PASS result includes evidence for Sol. One correction loop is preferred,
 ## Managed files
 
 ```text
-.codex/config.toml                              # only with --set-default
+.codex/config.toml                              # only with --set-default or --v2
 .codex/agents/terra.toml
 .codex/agents/luna.toml
 .codex/agents/sol.toml
 .codex/model-router-state.json
+.codex/model-router-v2-state.json               # only with --v2
 .codex/config.toml.codex-model-router.bak       # only when needed
 .agents/skills/model-router/SKILL.md
 .agents/skills/implementation-planning/SKILL.md
@@ -145,7 +154,7 @@ Any non-PASS result includes evidence for Sol. One correction loop is preferred,
 - Preserves unrelated TOML settings, comments, BOM, ordering, and LF/CRLF.
 - Rejects malformed, non-UTF-8, unsafe, symlinked, or junction-redirected managed paths.
 - Uses scope locking, atomic transactions, rollback, and conflict-safe recovery.
-- Restores package-managed primary settings during uninstall when unchanged.
+- Restores package-managed primary and V2 settings during uninstall when unchanged.
 - Never overwrites user-modified managed files.
 - Never changes `AGENTS.md`, shell profiles, editor settings, hooks, MCP servers, telemetry, accounts, or environment variables.
 

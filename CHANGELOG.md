@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.1 - 2026-08-02
+
+- Restore Codex multi-agent V2 as the install-only `--v2` option.
+- Keep V2 disabled for fresh installs unless `--v2` is explicitly supplied.
+- Keep the public CLI limited to `install`, `uninstall`, `--help`, and `--version`; separate V2 lifecycle commands remain removed.
+- Reuse the 2.x marked V2 block and state format so existing managed installations can be removed safely.
+- Remove unchanged package-managed V2 configuration during uninstall while preserving pre-existing or user-modified V2 content.
+- Add project, global, packed-package, and public-registry coverage for optional V2.
+
 ## 3.0.0 - 2026-08-02
 
 - Add the evidence-first `Primary -> Luna evidence -> Terra plan -> Luna implementation -> Terra verification` workflow.

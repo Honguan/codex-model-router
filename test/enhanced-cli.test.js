@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, stat, unlink, writeFile } from "node:fs/p
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { inspectInstallation, reasoningWarnings, resolveLocations, runCli } from "../lib/enhanced-cli.js";
+import { inspectInstallation, reasoningWarnings, resolveLocations, runCli } from "../lib/cli.js";
 import { TEMPLATES } from "../lib/manifest.js";
 
 const quiet = () => {};
@@ -160,6 +160,28 @@ test("status detects conflicting same-named agents across scopes", async () => {
       global_ownership: "user-modified"
     });
     assert.equal(await runCli(["status"], options), 1);
+  } finally { await dir.cleanup(); }
+});
+
+test("status detects sandbox and instruction conflicts across scopes", async () => {
+  const dir = await fixture();
+  try {
+    const options = { cwd: dir.project, home: dir.home, output: quiet, spawnSync: codexAvailable };
+    assert.equal(await runCli(["enable"], options), 0);
+    assert.equal(await runCli(["enable", "--global"], options), 0);
+    const locations = await resolveLocations(options, false);
+    const globalSol = await readFile(locations.global.sol, "utf8");
+    await writeFile(
+      locations.global.sol,
+      globalSol
+        .replace('sandbox_mode = "read-only"', 'sandbox_mode = "workspace-write"')
+        .replace("Analyze only the unresolved logical conflict.", "Analyze a changed logical conflict."),
+      "utf8"
+    );
+    const report = await inspectInstallation(options, false);
+    const sol = report.cross_scope.find((entry) => entry.name === "sol");
+    assert.equal(sol.status, "conflict");
+    assert.deepEqual(sol.fields, ["sandbox_mode", "instructions_hash"]);
   } finally { await dir.cleanup(); }
 });
 

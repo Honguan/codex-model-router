@@ -1,11 +1,11 @@
 name: Dispatch v3.0.1 Release
 
 on:
-  push:
+  pull_request:
     branches:
       - main
     paths:
-      - .github/workflows/dispatch-v3.0.1.yml
+      - release-trigger-v3.0.1.txt
 
 permissions:
   actions: write
@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   dispatch:
+    if: github.head_ref == 'release/trigger-v3.0.1'
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch the validated release workflow

@@ -1,1 +1,1 @@
-Inspect the validated v3.0.1 release workflow status.
+Dispatch the validated v3.0.1 release workflow after restoring release.yml.

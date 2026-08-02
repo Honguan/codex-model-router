@@ -93,7 +93,7 @@ test("explicit V2 install repairs a modified managed block and preserves unrelat
     assert.equal(stateAfter.scope, stateBefore.scope);
     assert.equal(stateAfter.configPath, stateBefore.configPath);
     assert.equal(typeof stateAfter.repairedAt, "string");
-    assert.match(output.join("\n"), /repair: experimental-v2 \(managed V2 block restored\)/);
+    assert.ok(output.includes(`repair: ${configPath} (managed V2 block restored)`));
   } finally {
     await dir.cleanup();
   }

@@ -1,0 +1,1 @@
+Dispatch the validated v3.0.4 release workflow. This trigger file must not be merged.

@@ -1,0 +1,1 @@
+Dispatch the validated v3.0.6 release workflow.

@@ -190,8 +190,8 @@ test("install migrates package-managed skills from legacy .agents into .codex", 
     const migrated = JSON.parse(await text(paths.state));
     assert.equal(migrated.version, 5);
     assert.equal(migrated.roots.skills, currentSkills);
-    assert.equal(migrated.files.skill.path, paths.skill);
-    assert.equal(migrated.files.planning.path, paths.planning);
+    assert.equal(migrated.files.skill.path, join(currentSkills, "model-router", "SKILL.md"));
+    assert.equal(migrated.files.planning.path, join(currentSkills, "implementation-planning", "SKILL.md"));
   } finally { await dir.cleanup(); }
 });
 

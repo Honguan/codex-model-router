@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.4.0 - 2026-08-02
+
+- Add primary-model-aware role inlining so Terra, Luna, and Sol primaries avoid redundant same-model subagents when their identity is available.
+- Keep a deterministic Terra -> Luna -> Terra fallback when Codex does not expose the active primary model.
+- Reject project/global scope overlap when a custom `CODEX_HOME` resolves to the current project's `.codex` root.
+- Expand status with complete resolved paths, ownership, configured primary values, routing mode, V2 scope, reasoning warnings, and project/global definition conflicts.
+- Add `status --json` and optional `status --strict-preflight` output.
+- Add safe exact-template `adopt` and conservative `repair` commands for missing or stale installation state.
+- Add non-blocking semantic warnings for ineffective reasoning combinations.
+- Add non-billable Codex capability preflight that reports unavailable or unknown capabilities without inference calls.
+- Add lifecycle and regression tests for issues #49 through #56.
+
 ## 2.3.0 - 2026-08-02
 
 - Add `enable`, `disable`, and `status` as the preferred user-facing lifecycle commands.

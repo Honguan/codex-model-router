@@ -59,3 +59,31 @@ test("plain install preserves user-modified V2 and reports that it could not dis
     await dir.cleanup();
   }
 });
+
+test("V2 install validates scope before reading existing global state", async () => {
+  const dir = await fixture();
+  try {
+    const globalOptions = { cwd: dir.home, home: dir.home, output: quiet };
+    assert.equal(await runCli(["install", "--global", "--v2"], globalOptions), 0);
+
+    const statePath = join(dir.home, ".codex", "model-router-v2-state.json");
+    const configPath = join(dir.home, ".codex", "config.toml");
+    const stateBefore = await readFile(statePath, "utf8");
+    const configBefore = await readFile(configPath, "utf8");
+    const output = [];
+
+    assert.equal(await runCli(["install", "--v2"], {
+      cwd: dir.home,
+      home: dir.home,
+      output: (line) => output.push(String(line))
+    }), 1);
+
+    const message = output.join("\n");
+    assert.match(message, /project install cannot use the user home/);
+    assert.doesNotMatch(message, /state scope mismatch/);
+    assert.equal(await readFile(statePath, "utf8"), stateBefore);
+    assert.equal(await readFile(configPath, "utf8"), configBefore);
+  } finally {
+    await dir.cleanup();
+  }
+});

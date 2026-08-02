@@ -5,6 +5,7 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  realpath,
   readdir,
   rm,
   stat,
@@ -150,9 +151,10 @@ test("install migrates package-managed skills from legacy .agents into .codex", 
   try {
     const paths = managed(dir);
     assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
-    const codex = join(dir.project, ".codex");
+    const project = await realpath(dir.project);
+    const codex = join(project, ".codex");
     const currentSkills = join(codex, "skills");
-    const legacyRoot = join(dir.project, ".agents");
+    const legacyRoot = join(project, ".agents");
     const legacySkills = join(legacyRoot, "skills");
     const legacySkill = join(legacySkills, "model-router", "SKILL.md");
     const legacyPlanning = join(legacySkills, "implementation-planning", "SKILL.md");

@@ -31,7 +31,9 @@ try {
   assert.match(help.stdout, /npx codex-model-router install/);
   assert.match(help.stdout, /npx codex-model-router uninstall/);
   assert.match(help.stdout, /--set-default/);
-  assert.doesNotMatch(help.stdout, /\benable\b/);
+  assert.match(help.stdout, /--v2/);
+  assert.match(help.stdout, /disabled by default/);
+  assert.doesNotMatch(help.stdout, /\bv2 enable\b/);
   assert.doesNotMatch(help.stdout, /\bstatus\b/);
   assert.doesNotMatch(help.stdout, /--dry-run/);
 
@@ -41,8 +43,11 @@ try {
   );
   await assert.rejects(access(join(project, ".codex")));
 
-  await exec(process.execPath, [binary, "install"], { cwd: project });
-  await assert.rejects(access(join(project, ".codex", "config.toml")));
+  await exec(process.execPath, [binary, "install", "--v2"], { cwd: project });
+  const config = await readFile(join(project, ".codex", "config.toml"), "utf8");
+  assert.match(config, /\[features\.multi_agent_v2\]/);
+  assert.match(config, /tool_namespace = "agents"/);
+  await access(join(project, ".codex", "model-router-v2-state.json"));
   assert.match(await readFile(join(project, ".codex", "agents", "terra.toml"), "utf8"), /gpt-5\.6-terra/);
   assert.match(await readFile(join(project, ".codex", "agents", "luna.toml"), "utf8"), /model_reasoning_effort = "xhigh"/);
   assert.match(await readFile(join(project, ".codex", "agents", "sol.toml"), "utf8"), /sandbox_mode = "read-only"/);

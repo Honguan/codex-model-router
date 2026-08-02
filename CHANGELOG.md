@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.6 - 2026-08-02
+
+- Install project and current-user skills under the applicable `.codex/skills/<skill-name>` directory instead of `.agents/skills`.
+- Safely migrate unchanged or user-modified package-managed skills from the legacy `.agents/skills` location during reinstall.
+- Restore a missing package-managed V2 marker block when `install --v2` is explicitly requested, while preserving unrelated TOML.
+- Update installation-path reporting, documentation, package smoke coverage, and project/global regression tests.
+
 ## 3.0.5 - 2026-08-02
 
 - Print the full resolved file path for every managed install, update, migration, preservation, skip, repair, and removal message.

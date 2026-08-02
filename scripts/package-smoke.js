@@ -51,8 +51,8 @@ try {
   assert.match(await readFile(join(project, ".codex", "agents", "terra.toml"), "utf8"), /gpt-5\.6-terra/);
   assert.match(await readFile(join(project, ".codex", "agents", "luna.toml"), "utf8"), /model_reasoning_effort = "xhigh"/);
   assert.match(await readFile(join(project, ".codex", "agents", "sol.toml"), "utf8"), /sandbox_mode = "read-only"/);
-  assert.match(await readFile(join(project, ".agents", "skills", "model-router", "SKILL.md"), "utf8"), /REQUIREMENT_EVIDENCE/);
-  assert.match(await readFile(join(project, ".agents", "skills", "implementation-planning", "SKILL.md"), "utf8"), /EVIDENCE_VERSION/);
+  assert.match(await readFile(join(project, ".codex", "skills", "model-router", "SKILL.md"), "utf8"), /REQUIREMENT_EVIDENCE/);
+  assert.match(await readFile(join(project, ".codex", "skills", "implementation-planning", "SKILL.md"), "utf8"), /EVIDENCE_VERSION/);
 
   await exec(process.execPath, [binary, "install"], { cwd: project });
   await assert.rejects(access(join(project, ".codex", "model-router-v2-state.json")));

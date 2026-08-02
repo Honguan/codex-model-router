@@ -26,7 +26,7 @@ test("project install reports Codex agents and Agent Skills standard locations",
 
     const message = output.join("\n");
     assert.match(message, new RegExp(`location: Codex agents \\(${escapeRegExp(join(dir.project, ".codex", "agents"))}\\)`));
-    assert.match(message, new RegExp(`location: Codex user skills \\(${escapeRegExp(join(dir.project, ".agents", "skills"))}\\)`));
+    assert.match(message, new RegExp(`location: Codex user skills \\(${escapeRegExp(join(dir.project, ".codex", "skills"))}\\)`));
     assert.match(message, new RegExp(`${escapeRegExp(join(dir.project, ".codex", "skills", ".system"))} is reserved for bundled Codex skills`));
   } finally {
     await dir.cleanup();
@@ -46,7 +46,7 @@ test("global install reports the current user's Codex and skill locations", asyn
     const home = await realpath(dir.home);
     const message = output.join("\n");
     assert.match(message, new RegExp(`location: Codex agents \\(${escapeRegExp(join(home, ".codex", "agents"))}\\)`));
-    assert.match(message, new RegExp(`location: Codex user skills \\(${escapeRegExp(join(home, ".agents", "skills"))}\\)`));
+    assert.match(message, new RegExp(`location: Codex user skills \\(${escapeRegExp(join(home, ".codex", "skills"))}\\)`));
   } finally {
     await dir.cleanup();
   }
@@ -64,7 +64,7 @@ test("install and uninstall report every managed file with its full path", async
 
     const home = await realpath(dir.home);
     const codex = join(home, ".codex");
-    const skills = join(home, ".agents", "skills");
+    const skills = join(codex, "skills");
     const files = {
       config: join(codex, "config.toml"),
       v2State: join(codex, "model-router-v2-state.json"),

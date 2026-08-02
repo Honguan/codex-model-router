@@ -32,10 +32,10 @@ Use `--global --v2` for the current user. Restart Codex after installation.
 
 | Scope | Agent definitions | User skills |
 | --- | --- | --- |
-| Project | `<project>/.codex/agents` | `<project>/.agents/skills` |
-| Current user | `~/.codex/agents` | `~/.agents/skills` |
+| Project | `<project>/.codex/agents` | `<project>/.codex/skills` |
+| Current user | `~/.codex/agents` | `~/.codex/skills` |
 
-`~/.agents/skills` is the Codex user-skill location. `~/.codex/skills/.system` is reserved for bundled Codex skills; seeing only `.system` there is normal, and custom package skills should not be copied into it. The CLI prints the resolved agent and skill locations after installation.
+Skills are always installed under the applicable Codex root at `.codex/skills/<skill-name>`; `.codex/skills/.system` remains reserved for bundled Codex skills. Reinstalling from an older release safely migrates package-managed skills from `.agents/skills`. The CLI prints the resolved agent and skill locations after installation.
 
 ## Configuration
 
@@ -123,12 +123,12 @@ All diagrams are collapsed by default. Select a heading to expand it.
 ## V2
 
 ```text
-install --v2  → enable V2; repair a modified tracked marker block
+install --v2  → enable V2; repair a modified or missing tracked marker block
 install       → disable unchanged package-managed V2
 uninstall     → remove the router and unchanged managed V2
 ```
 
-When `install --v2` is explicitly run again and package state still exists, a changed package-marked V2 block is rebuilt in place, its hash is updated, and unrelated TOML is preserved. Pre-existing unmanaged V2, missing state, incomplete markers, or duplicate markers remain preserved and stop the operation to prevent accidental overwrites.
+When `install --v2` is explicitly run again and package state still exists, a changed or missing package-marked V2 block is rebuilt, its hash is updated, and unrelated TOML is preserved. Pre-existing unmanaged V2, missing state, incomplete markers, or duplicate markers remain preserved and stop the operation to prevent accidental overwrites.
 
 ## Remove
 

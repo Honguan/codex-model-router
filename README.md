@@ -32,10 +32,10 @@ npx codex-model-router@latest install --v2
 
 | 範圍 | 代理定義 | 使用者技能 |
 | --- | --- | --- |
-| 專案 | `<專案>/.codex/agents` | `<專案>/.agents/skills` |
-| 目前使用者 | `~/.codex/agents` | `~/.agents/skills` |
+| 專案 | `<專案>/.codex/agents` | `<專案>/.codex/skills` |
+| 目前使用者 | `~/.codex/agents` | `~/.codex/skills` |
 
-`~/.agents/skills` 是 Codex 使用者技能位置。`~/.codex/skills/.system` 只放 Codex 內建技能；該資料夾只有 `.system` 屬於正常情況，不應把本套件的自訂技能複製進去。安裝完成後，CLI 會直接顯示實際代理與技能路徑。
+技能一律安裝到對應 Codex 根目錄下的 `.codex/skills/<技能名稱>`；`.codex/skills/.system` 仍保留給 Codex 內建技能。從舊版重新安裝時，套件會將受管理的 `.agents/skills` 技能安全遷移到新位置。安裝完成後，CLI 會直接顯示實際代理與技能路徑。
 
 ## 設定
 
@@ -123,12 +123,12 @@ npx codex-model-router@latest install \
 ## V2 行為
 
 ```text
-install --v2  → 啟用 V2；已追蹤的標記區塊被修改時自動修復
+install --v2  → 啟用 V2；已追蹤的標記區塊被修改或遺失時自動修復
 install       → 停用未被修改的套件管理 V2
 uninstall     → 移除路由器與未被修改的受管理 V2
 ```
 
-再次明確執行 `install --v2` 時，若套件狀態仍存在且只有套件標記內的 V2 內容被修改，安裝器只會重建該標記區塊、更新雜湊並保留其他 TOML。既有未受管理、缺少狀態、標記不完整或標記重複的 V2 設定仍會保留並停止操作，避免誤覆寫。
+再次明確執行 `install --v2` 時，若套件狀態仍存在且套件標記內的 V2 內容被修改或整個受管理區塊遺失，安裝器會重建該標記區塊、更新雜湊並保留其他 TOML。既有未受管理、缺少狀態、標記不完整或標記重複的 V2 設定仍會保留並停止操作，避免誤覆寫。
 
 ## 移除
 

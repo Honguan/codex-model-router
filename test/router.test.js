@@ -13,7 +13,7 @@ import {
   writeFile
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 import { TEMPLATES, VERSION } from "../lib/manifest.js";
@@ -45,8 +45,8 @@ function managed(dir) {
     terra: join(dir.project, ".codex", "agents", "terra.toml"),
     luna: join(dir.project, ".codex", "agents", "luna.toml"),
     sol: join(dir.project, ".codex", "agents", "sol.toml"),
-    skill: join(dir.project, ".agents", "skills", "model-router", "SKILL.md"),
-    planning: join(dir.project, ".agents", "skills", "implementation-planning", "SKILL.md"),
+    skill: join(dir.project, ".codex", "skills", "model-router", "SKILL.md"),
+    planning: join(dir.project, ".codex", "skills", "implementation-planning", "SKILL.md"),
     lock: join(dir.project, ".codex", "model-router.lock"),
     journal: join(dir.project, ".codex", "model-router-transaction.json"),
     transactionData: join(dir.project, ".codex", "model-router-transaction-data")
@@ -136,12 +136,60 @@ test("fresh install preserves the primary model and writes adaptive templates", 
     assert.match(await text(paths.luna), /sandbox_mode = "workspace-write"/);
     assert.match(await text(paths.sol), /sandbox_mode = "read-only"/);
     const state = JSON.parse(await text(paths.state));
-    assert.equal(state.version, 4);
+    assert.equal(state.version, 5);
     assert.equal(state.packageVersion, VERSION);
     assert.deepEqual(state.config.values, {});
     assert.equal(await exists(paths.journal), false);
     assert.equal(await exists(paths.transactionData), false);
     assert.equal(await run(["doctor"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+  } finally { await dir.cleanup(); }
+});
+
+test("install migrates package-managed skills from legacy .agents into .codex", async () => {
+  const dir = await fixture();
+  try {
+    const paths = managed(dir);
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    const codex = join(dir.project, ".codex");
+    const currentSkills = join(codex, "skills");
+    const legacyRoot = join(dir.project, ".agents");
+    const legacySkills = join(legacyRoot, "skills");
+    const legacySkill = join(legacySkills, "model-router", "SKILL.md");
+    const legacyPlanning = join(legacySkills, "implementation-planning", "SKILL.md");
+    await mkdir(dirname(legacySkill), { recursive: true });
+    await mkdir(dirname(legacyPlanning), { recursive: true });
+    const customizedSkill = `${await text(paths.skill)}\n# user customization\n`;
+    await writeFile(legacySkill, customizedSkill);
+    await writeFile(legacyPlanning, await text(paths.planning));
+    await rm(currentSkills, { recursive: true, force: true });
+
+    const state = JSON.parse(await text(paths.state));
+    state.version = 4;
+    state.packageVersion = "3.0.5";
+    state.roots.skills = legacySkills;
+    state.roots.skillsRoot = legacyRoot;
+    state.files.skill.path = legacySkill;
+    state.files.planning.path = legacyPlanning;
+    state.createdDirs = [...new Set([
+      ...state.createdDirs.map((directory) => {
+        const suffix = relative(currentSkills, directory);
+        return suffix === "" || (!suffix.startsWith(`..${sep}`) && suffix !== ".." && !isAbsolute(suffix))
+          ? join(legacySkills, suffix)
+          : directory;
+      }),
+      legacyRoot
+    ])];
+    await writeFile(paths.state, `${JSON.stringify(state, null, 2)}\n`);
+
+    assert.equal(await run(["install"], { cwd: dir.project, home: dir.home, output: quiet }), 0);
+    assert.equal(await text(paths.skill), customizedSkill);
+    assert.equal(await text(paths.planning), TEMPLATES.planning.content);
+    assert.equal(await exists(legacyRoot), false);
+    const migrated = JSON.parse(await text(paths.state));
+    assert.equal(migrated.version, 5);
+    assert.equal(migrated.roots.skills, currentSkills);
+    assert.equal(migrated.files.skill.path, paths.skill);
+    assert.equal(migrated.files.planning.path, paths.planning);
   } finally { await dir.cleanup(); }
 });
 
@@ -275,12 +323,13 @@ test("project symlinks and junctions that redirect managed roots are rejected", 
   } finally { await dir.cleanup(); }
 });
 
-test("skill-root redirection is rejected without touching the external target", async (context) => {
+test("Codex skill-root redirection is rejected without touching the external target", async (context) => {
   const dir = await fixture();
   try {
     const outside = join(dir.root, "outside skills");
     await mkdir(outside, { recursive: true });
-    const agents = join(dir.project, ".agents");
+    await mkdir(join(dir.project, ".codex"), { recursive: true });
+    const agents = join(dir.project, ".codex", "skills");
     try {
       await symlink(outside, agents, process.platform === "win32" ? "junction" : "dir");
     } catch (error) {

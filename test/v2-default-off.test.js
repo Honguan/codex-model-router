@@ -100,6 +100,37 @@ test("explicit V2 install repairs a modified managed block and preserves unrelat
   }
 });
 
+test("global V2 reinstall restores a missing managed block", async () => {
+  const dir = await fixture();
+  try {
+    const output = [];
+    const options = {
+      cwd: dir.home,
+      home: dir.home,
+      output: (line) => output.push(String(line))
+    };
+    assert.equal(await runCli(["install", "--global", "--v2"], options), 0);
+    const configPath = join(dir.home, ".codex", "config.toml");
+    const statePath = join(dir.home, ".codex", "model-router-v2-state.json");
+    const stateBefore = JSON.parse(await readFile(statePath, "utf8"));
+    await writeFile(configPath, "theme = \"dark\"\n", "utf8");
+
+    output.length = 0;
+    assert.equal(await runCli(["install", "--global", "--v2"], options), 0);
+
+    const repaired = await readFile(configPath, "utf8");
+    const stateAfter = JSON.parse(await readFile(statePath, "utf8"));
+    assert.match(repaired, /^theme = "dark"$/m);
+    assert.match(repaired, /\[features\.multi_agent_v2\]/);
+    assert.equal(stateAfter.scope, stateBefore.scope);
+    assert.equal(stateAfter.configPath, stateBefore.configPath);
+    assert.equal(typeof stateAfter.repairedAt, "string");
+    assert.ok(output.some((line) => line.includes("managed V2 block restored")));
+  } finally {
+    await dir.cleanup();
+  }
+});
+
 test("V2 install validates scope before reading existing global state", async () => {
   const dir = await fixture();
   try {

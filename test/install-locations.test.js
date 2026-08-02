@@ -24,11 +24,10 @@ test("project install reports Codex agents and Agent Skills standard locations",
       output: (line) => output.push(String(line))
     }), 0);
 
-    const project = await realpath(dir.project);
     const message = output.join("\n");
-    assert.match(message, new RegExp(`location: Codex agents \\(${escapeRegExp(join(project, ".codex", "agents"))}\\)`));
-    assert.match(message, new RegExp(`location: Codex user skills \\(${escapeRegExp(join(project, ".agents", "skills"))}\\)`));
-    assert.match(message, new RegExp(`${escapeRegExp(join(project, ".codex", "skills", ".system"))} is reserved for bundled Codex skills`));
+    assert.match(message, new RegExp(`location: Codex agents \\(${escapeRegExp(join(dir.project, ".codex", "agents"))}\\)`));
+    assert.match(message, new RegExp(`location: Codex user skills \\(${escapeRegExp(join(dir.project, ".agents", "skills"))}\\)`));
+    assert.match(message, new RegExp(`${escapeRegExp(join(dir.project, ".codex", "skills", ".system"))} is reserved for bundled Codex skills`));
   } finally {
     await dir.cleanup();
   }

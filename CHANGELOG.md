@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.4.2 - 2026-08-02
+
+- Safely migrate exact legacy home-directory Project Scope state to Global Scope during explicit global lifecycle commands.
+- Keep custom `CODEX_HOME`, unsafe paths, invalid hashes, active locks, and unfinished transactions blocked.
+- Preserve user-modified managed files while correcting only the state scope metadata.
+- Report migration requirements through global status and zero-write dry-run output.
+- Add regression coverage for migration, user changes, and non-equivalent custom scope rejection.
+
 ## 2.4.1 - 2026-08-02
 
 - Allow explicit global lifecycle commands to run from the user home directory.

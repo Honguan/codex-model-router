@@ -122,7 +122,7 @@ Fast 與思考等級是獨立設定，且僅保存到同一個子代理角色；
 
 - 同一個工作流程不重複啟動相同模型代理。
 - 主模型與代理角色相同時，由主線程直接完成該角色工作。
-- Luna、Terra、Sol 都具備寫入能力，但只能由升級狀態與執行旗標授權寫入。
+- Luna、Terra、Sol 都具備寫入能力，但只能由升級狀態與執行旗標授權寫入；Terra 與 takeover 前 Sol 的企劃／審查只回傳內容，不寫入企劃檔。
 - Terra 負責企劃與獨立驗證。
 - Sol 僅在驗證結果不是 PASS 時介入。
 - 最終回覆一律回到主模型。
@@ -133,7 +133,7 @@ Fast 與思考等級是獨立設定，且僅保存到同一個子代理角色；
 
 狀態檔固定為 `RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`。登錄是根層 `{version?, root_session_id, workflow_id, agents:{[role]:{agent_id,status,handoff}}, diagnostics?}`；`agents` 必須是以角色為 key 的物件，不得是陣列，也不得巢狀 `root`/`workflow`。只使用精確 ID；未知或模糊的 ID 不得替換。相同主模型、停用、無效（政策無效）、主模型切換或多餘實例一律 `removed-by-policy`；其餘每個已保存實例恰有一個結果：`reused`、`replaced`、`removed-by-policy`、`resume-failed`、`not-supported`、`stale-workflow` 或 `invalid-agent-id`。
 
-只有主機確認實例遺失、關閉、無效、該實例不支援或恢復失敗，且主機明確建立新實例並獲政策允許時才可替換；handoff 必須原樣保留。主模型所在主線程（不論選定模型）負責登錄載入、原子持久化與 runtime 協調；Terra/Sol 子角色及企劃僅讀取登錄，Luna 只負責 workspace/PLAN 寫入。寫入使用同目錄暫存檔的 flush、close、rename 原子順序；任一步驟失敗便保留先前登錄、不發布 partial state，也不執行相依動作。這些是模板契約測試，不是 live E2E。
+只有主機確認實例遺失、關閉、無效、該實例不支援或恢復失敗，且主機明確建立新實例並獲政策允許時才可替換；handoff 必須原樣保留。主模型所在主線程（不論選定模型）負責登錄載入、原子持久化與 runtime 協調；Terra/Sol 子角色及企劃僅讀取登錄，企劃檔的寫入與清理由目前有寫入權的 executor 負責。寫入使用同目錄暫存檔的 flush、close、rename 原子順序；任一步驟失敗便保留先前登錄、不發布 partial state，也不執行相依動作。這些是模板契約測試，不是 live E2E。
 
 ## 工作流程升級狀態機
 
@@ -142,6 +142,12 @@ Fast 與思考等級是獨立設定，且僅保存到同一個子代理角色；
 Stage 單調為 `INITIAL` → `SOL_REPLAN_WITH_LUNA` → `SOL_PLAN_REVIEW_WITH_TERRA` → `SOL_FULL_TAKEOVER`。`PASS` 終止；`EVIDENCE_GAP`/`REQUIREMENT_CLARIFICATION` 留在原 stage 且不嘗試執行或增加計數；只有 `FAIL_PLAN`/`FAIL_IMPLEMENTATION` 推進。Luna/Terra 主模型先由 Terra 規劃審查、Luna 執行；primary Sol 的 INITIAL 不建立 Luna，只使用 Terra 子代理。Luna 首次停用後 Terra 最多執行兩次，仍失敗便永久停用 Terra 並由 Sol 接管。
 
 所有角色 TOML 具 workspace-write 能力，但寫入由 stage 與旗標限制：Sol 在 `SOL_FULL_TAKEOVER` 前唯讀，停用的 primary 永久為 coord-only；最多兩個子代理、不得建立與主模型同模型的 child，且只在 stage 要求時 spawn。主線程負責 atomic flush/close/rename；失敗時保留先前狀態、不發布 partial state、不執行相依動作。這是主機消費的 declarative contract，不提供 runtime API、CLI 或 live E2E。
+
+## 企劃檔生命週期
+
+每個 workflow 的企劃檔固定為選定 scope 的 `<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md`，不會寫入來源目錄，也不會掃描其他 workflow。狀態保存 `plan_path`、artifact／cleanup owner、cleanup required 與 artifact status。Terra 與 takeover 前 Sol 回傳完整內容或 delta；目前有寫入權的 executor 才能原子寫入或更新。`INITIAL` 使用目前 executor、`SOL_REPLAN_WITH_LUNA` 使用 Luna、Luna 停用後的 `SOL_PLAN_REVIEW_WITH_TERRA` 使用 Terra、`SOL_FULL_TAKEOVER` 使用 Sol；沒有可寫入角色時只保留 in-memory artifact，不宣稱已寫檔。
+
+PASS 在必要證據保存後排程由同一 cleanup owner 移除該 workflow 的精確目錄。取消、阻塞、恢復、替換與主模型切換保留原本的路徑、版本與 owner；新 workflow 使用新目錄。清理失敗會保存並回報 `cleanup-failed`，只有明確要求保留時才標示 `retained`。
 
 ## V2 行為
 

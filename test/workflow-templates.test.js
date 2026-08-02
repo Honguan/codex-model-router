@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LEGACY_TEMPLATES, TEMPLATES } from "../lib/manifest.js";
+import { LEGACY_TEMPLATES, TEMPLATES, WORKFLOW_PLAN_ARTIFACT_CONTRACT } from "../lib/manifest.js";
 
 function activeSandboxAssignments(content) {
   return content.split(/\r?\n/)
@@ -18,8 +18,8 @@ test("Luna remains permanently gated by its task-scoped execution flag", () => {
 });
 
 test("Terra has workspace-write capability with a contract execution gate", () => {
-  assert.match(TEMPLATES.terra.content, /ARTIFACT_DIR/);
-  assert.match(TEMPLATES.terra.content, /absolute PLAN_PATH/);
+  assert.match(TEMPLATES.terra.content, /PLAN_ARTIFACT_PATH/);
+  assert.match(TEMPLATES.terra.content, /CODEX_ROOT/);
   assert.match(TEMPLATES.terra.content, /do not write PLAN_PATH/);
   assert.match(TEMPLATES.terra.content, /FAIL_IMPLEMENTATION/);
   assert.match(TEMPLATES.terra.content, /FAIL_PLAN/);
@@ -32,7 +32,7 @@ test("Sol is contract-gated read-only before full takeover", () => {
   assert.match(TEMPLATES.sol.content, /non-PASS verification verdict/);
   assert.match(TEMPLATES.sol.content, /complete revised plan content/);
   assert.match(TEMPLATES.sol.content, /do not write PLAN_PATH/);
-  assert.match(TEMPLATES.sol.content, /same Luna role/);
+  assert.match(TEMPLATES.sol.content, /current active writable executor/);
   assert.deepEqual(activeSandboxAssignments(TEMPLATES.sol.content), ["workspace-write"]);
   assert.match(TEMPLATES.sol.content, /SOL_FULL_TAKEOVER/);
   assert.match(TEMPLATES.sol.content, /sol_full_takeover/);
@@ -59,21 +59,21 @@ test("router uses matching primary inline and task-scoped escalation stages", ()
   assert.match(skill, /ordinary questions, explanations, read-only analysis/);
 });
 
-test("all current templates carry the temporary artifact and exact plan-path contract", () => {
+test("all current templates carry the deterministic scoped plan-artifact contract", () => {
   const contracts = [
-    ["terra", [/ARTIFACT_DIR/, /absolute PLAN_PATH/, /outside the workspace/, /do not write PLAN_PATH/]],
-    ["luna", [/same absolute ARTIFACT_DIR/, /exact absolute PLAN_PATH/, /write it only to that exact PLAN_PATH/, /relative fallback/]],
-    ["sol", [/same absolute ARTIFACT_DIR/, /exact absolute PLAN_PATH/, /complete revised plan content/, /do not write PLAN_PATH/]],
-    ["skill", [/one unique absolute ARTIFACT_DIR/, /one absolute PLAN_PATH/, /exact same values to every role/, /best-effort cleanup/]],
-    ["planning", [/exact absolute ARTIFACT_DIR\/PLAN_PATH/, /unchanged and outside the workspace/, /relative or missing path/]]
+    ["terra", [/workflow_id/, /PLAN_ARTIFACT_PATH/, /CODEX_ROOT/, /do not write PLAN_PATH/]],
+    ["luna", [/same workflow_id/, /PLAN_ARTIFACT_PATH/, /active writable executor/, /in-memory artifact/]],
+    ["sol", [/same workflow_id/, /PLAN_ARTIFACT_PATH/, /complete revised plan content/, /do not write PLAN_PATH/]],
+    ["skill", [/PLAN_ARTIFACT_PATH/, /model-router\/workflows\/<workflow_id>\/PLAN\.md/, /active writable executor/, /cleanup-failed/]],
+    ["planning", [/workflow_id/, /PLAN_ARTIFACT_PATH/, /CODEX_ROOT/, /source-tree path/]]
   ];
 
   for (const [name, patterns] of contracts) {
     const content = TEMPLATES[name].content;
     for (const pattern of patterns) assert.match(content, pattern, `${name} missing ${pattern}`);
     assert.doesNotMatch(content, /workspace PLAN\.md|workspace\/PLAN\.md|workspace\\PLAN\.md/i);
-    assert.doesNotMatch(content, /fallback.*PLAN\.md/i);
   }
+  assert.equal(WORKFLOW_PLAN_ARTIFACT_CONTRACT.path, "<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md");
 });
 
 test("pre-change current templates remain recognized for safe migration", () => {
@@ -88,4 +88,6 @@ test("pre-change current templates remain recognized for safe migration", () => 
   for (const [name, pattern] of legacyEvidence) {
     assert.ok(LEGACY_TEMPLATES[name].some((content) => pattern.test(content)), `${name} legacy template is missing`);
   }
+  assert.ok(LEGACY_TEMPLATES.terra.some((content) => /operating system temporary-directory facility/.test(content)));
+  assert.ok(LEGACY_TEMPLATES.skill.some((content) => /operating system temporary-directory facility/.test(content)));
 });

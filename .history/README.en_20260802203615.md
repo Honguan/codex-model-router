@@ -56,49 +56,49 @@ All diagrams are collapsed by default. Select a heading to expand it.
 <details>
 <summary><strong>Roles, models, access, and responsibilities</strong></summary>
 
-![Codex Model Router role diagram](docs/images/en/roles.png)
+![Codex Model Router role diagram](docs/images/en/roles.svg)
 
 </details>
 
 <details>
 <summary><strong>Standard main workflow overview</strong></summary>
 
-![Codex Model Router main workflow overview](docs/images/en/workflow-overview.png)
+![Codex Model Router main workflow overview](docs/images/en/workflow-overview.svg)
 
 </details>
 
 <details>
 <summary><strong>Estimated model usage share</strong></summary>
 
-![Estimated model usage share](docs/images/en/model-usage-share.png)
+![Estimated model usage share](docs/images/en/model-usage-share.svg)
 
 </details>
 
 <details>
 <summary><strong>Primary-model Q&A outside the workflow</strong></summary>
 
-![Primary-model Q&A scenarios](docs/images/en/primary-qa-scenarios.png)
+![Primary-model Q&A scenarios](docs/images/en/primary-qa-scenarios.svg)
 
 </details>
 
 <details>
 <summary><strong>Scenario A: Primary is Sol</strong></summary>
 
-![Sol primary workflow](docs/images/en/primary-sol.png)
+![Sol primary workflow](docs/images/en/primary-sol.svg)
 
 </details>
 
 <details>
 <summary><strong>Scenario B: Primary is Terra</strong></summary>
 
-![Terra primary workflow](docs/images/en/primary-terra.png)
+![Terra primary workflow](docs/images/en/primary-terra.svg)
 
 </details>
 
 <details>
 <summary><strong>Scenario C: Primary is Luna</strong></summary>
 
-![Luna primary workflow](docs/images/en/primary-luna.png)
+![Luna primary workflow](docs/images/en/primary-luna.svg)
 
 </details>
 

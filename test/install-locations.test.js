@@ -52,6 +52,55 @@ test("global install reports the current user's Codex and skill locations", asyn
   }
 });
 
+test("install and uninstall report every managed file with its full path", async () => {
+  const dir = await fixture();
+  try {
+    const installOutput = [];
+    assert.equal(await runCli(["install", "--global", "--v2"], {
+      cwd: dir.home,
+      home: dir.home,
+      output: (line) => installOutput.push(String(line))
+    }), 0);
+
+    const home = await realpath(dir.home);
+    const codex = join(home, ".codex");
+    const skills = join(home, ".agents", "skills");
+    const files = {
+      config: join(codex, "config.toml"),
+      v2State: join(codex, "model-router-v2-state.json"),
+      terra: join(codex, "agents", "terra.toml"),
+      luna: join(codex, "agents", "luna.toml"),
+      sol: join(codex, "agents", "sol.toml"),
+      skill: join(skills, "model-router", "SKILL.md"),
+      planning: join(skills, "implementation-planning", "SKILL.md"),
+      state: join(codex, "model-router-state.json")
+    };
+    const installed = installOutput.join("\n");
+    for (const path of Object.values(files)) {
+      assert.match(installed, new RegExp(`(?:create|update|repair|skip|preserve): ${escapeRegExp(path)}(?: \\(|$)`, "m"));
+    }
+    assert.doesNotMatch(installed, /^(?:create|update|repair|skip|preserve): (?:terra|luna|sol|skill|planning|state)(?: \(|$)/m);
+
+    const uninstallOutput = [];
+    assert.equal(await runCli(["uninstall", "--global"], {
+      cwd: dir.home,
+      home: dir.home,
+      output: (line) => uninstallOutput.push(String(line))
+    }), 0);
+
+    const removed = uninstallOutput.join("\n");
+    for (const path of Object.values(files)) {
+      assert.match(removed, new RegExp(`remove: ${escapeRegExp(path)}(?: \\(|$)`, "m"));
+    }
+    assert.match(removed, new RegExp(`remove-if-empty: ${escapeRegExp(join(skills, "implementation-planning"))}$`, "m"));
+    assert.match(removed, new RegExp(`remove-if-empty: ${escapeRegExp(join(skills, "model-router"))}$`, "m"));
+    assert.match(removed, new RegExp(`remove-if-empty: ${escapeRegExp(join(codex, "agents"))}$`, "m"));
+    assert.doesNotMatch(removed, /^remove: (?:terra|luna|sol|skill|planning|state)$/m);
+  } finally {
+    await dir.cleanup();
+  }
+});
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

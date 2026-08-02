@@ -55,9 +55,13 @@ async function main() {
     assert.match(enabled, /\[features\.multi_agent_v2\]/);
     await access(join(project, ".codex", "model-router-v2-state.json"));
 
-    await invoke("uninstall");
+    await invoke("install");
     assert.equal(await readFile(join(project, ".codex", "config.toml"), "utf8"), original);
     await assert.rejects(access(join(project, ".codex", "model-router-v2-state.json")));
+    await access(join(project, ".codex", "agents", "luna.toml"));
+
+    await invoke("uninstall");
+    assert.equal(await readFile(join(project, ".codex", "config.toml"), "utf8"), original);
 
     console.log(`Verified ${name}@${version} from the public npm registry`);
   } finally {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.2 - 2026-08-02
+
+- Make `install` without `--v2` disable an unchanged package-managed V2 block from an earlier installation.
+- Keep `install --v2` as the only way to enable package-managed V2.
+- Preserve pre-existing, untracked, or user-modified V2 configuration and return a nonzero result when managed V2 cannot be disabled safely.
+- Keep routing agents installed while switching package-managed V2 off.
+- Add unit, packed-package, and public-registry coverage for switching from V2 enabled to the default disabled state.
+
 ## 3.0.1 - 2026-08-02
 
 - Restore Codex multi-agent V2 as the install-only `--v2` option.

@@ -54,6 +54,11 @@ try {
   assert.match(await readFile(join(project, ".agents", "skills", "model-router", "SKILL.md"), "utf8"), /REQUIREMENT_EVIDENCE/);
   assert.match(await readFile(join(project, ".agents", "skills", "implementation-planning", "SKILL.md"), "utf8"), /EVIDENCE_VERSION/);
 
+  await exec(process.execPath, [binary, "install"], { cwd: project });
+  await assert.rejects(access(join(project, ".codex", "model-router-v2-state.json")));
+  await assert.rejects(access(join(project, ".codex", "config.toml")));
+  await access(join(project, ".codex", "agents", "luna.toml"));
+
   await exec(process.execPath, [binary, "uninstall"], { cwd: project });
   await assert.rejects(access(join(project, ".codex")));
   await assert.rejects(access(join(project, ".agents")));

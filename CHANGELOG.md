@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.5 - 2026-08-02
+
+- Print the full resolved file path for every managed install, update, migration, preservation, skip, repair, and removal message.
+- Replace ambiguous lifecycle aliases such as `terra`, `skill`, `planning`, and `state` with their exact Codex or user-skill file paths.
+- Report package-managed V2 changes against the exact `config.toml` and `model-router-v2-state.json` paths.
+- Keep empty-directory cleanup output path-based so users can see every directory considered for removal.
+- Add global install and uninstall regression coverage for all managed files and key cleanup directories.
+
 ## 3.0.4 - 2026-08-02
 
 - Repair a changed package-managed V2 marker block when `install --v2` is explicitly requested again.

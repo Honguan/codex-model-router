@@ -84,6 +84,25 @@ All diagrams are collapsed by default. Select a heading to expand it.
 </details>
 
 <details>
+<summary><strong>Plan-artifact persistence and cleanup</strong></summary>
+
+```mermaid
+flowchart TD
+    A[Terra or Sol returns plan content] --> B{Active writable executor?}
+    B -->|No| C[Keep a self-contained in-memory artifact\nDo not claim a file write]
+    B -->|Yes| D[Atomically write\n<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md]
+    D --> E[State: active\nRecord plan_path and owner]
+    E --> F{Verification PASS?}
+    F -->|No, blocked, resume, or switch| G[Preserve path, version, and owner]
+    F -->|Yes| H[State: pending-cleanup]
+    H --> I[Same cleanup owner\nRemove only this workflow directory]
+    I -->|Success| J[State: removed]
+    I -->|Failure| K[State: cleanup-failed and report it]
+```
+
+</details>
+
+<details>
 <summary><strong>Estimated model usage share</strong></summary>
 
 ![Estimated model usage share](docs/images/en/model-usage-share.png)

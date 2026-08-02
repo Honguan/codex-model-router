@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.7 - 2026-08-03
+
+- Define deterministic plan-artifact ownership, persistence, cleanup, and failure reporting for each workflow stage.
+- Store each plan at the selected Codex scope under `model-router/workflows/<workflow_id>/PLAN.md` instead of the source tree.
+- Keep Terra and pre-takeover Sol as plan-content authors and reviewers while the active writable executor persists and removes artifacts.
+- Preserve plan ownership across blocked work, session recovery, replacement, cancellation, and primary-model switches.
+- Add English and Traditional Chinese lifecycle documentation with version-controlled Mermaid flowcharts.
+
 ## 3.0.6 - 2026-08-02
 
 - Install project and current-user skills under the applicable `.codex/skills/<skill-name>` directory instead of `.agents/skills`.

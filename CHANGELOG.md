@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.3 - 2026-08-02
+
+- Validate project and global scope before V2 reads its managed state file.
+- Prevent home-directory project commands from misreading an existing global V2 installation.
+- Return the actionable project-scope error instead of `experimental V2 state scope mismatch`.
+- Preserve existing global V2 state and configuration when an invalid project command is attempted.
+- Add Windows-compatible regression coverage for the reported scope mismatch.
+
 ## 3.0.2 - 2026-08-02
 
 - Make `install` without `--v2` disable an unchanged package-managed V2 block from an earlier installation.

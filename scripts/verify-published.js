@@ -52,7 +52,7 @@ async function main() {
     await assert.rejects(invoke("enable"), /Command failed/);
     await invoke("install", "--set-default", "--v2");
     const enabled = await readFile(join(project, ".codex", "config.toml"), "utf8");
-    assert.match(enabled, /\[features\.multi_agent_v2\]/);
+    assert.match(enabled, /\[features\.multi_agent_v2\]\nenabled = true\nhide_spawn_agent_metadata = false\ntool_namespace = "agents"/);
     await access(join(project, ".codex", "model-router-v2-state.json"));
 
     await invoke("install");

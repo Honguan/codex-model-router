@@ -58,6 +58,7 @@ test("install --v2 enables managed V2 and uninstall removes it", async () => {
     assert.equal(await runCli(["install", "--v2"], options), 0);
     const config = await readFile(join(dir.project, ".codex", "config.toml"), "utf8");
     assert.match(config, /\[features\.multi_agent_v2\]/);
+    assert.match(config, /enabled = true/);
     assert.match(config, /tool_namespace = "agents"/);
     assert.equal(await exists(join(dir.project, ".codex", "model-router-v2-state.json")), true);
     assert.equal(await runCli(["uninstall"], options), 0);
@@ -129,7 +130,6 @@ test("invalid reasoning and removed public controls are rejected before writes",
       ["uninstall", "--v2"],
       ["enable"],
       ["disable"],
-      ["status"],
       ["doctor"],
       ["adopt"],
       ["repair"],

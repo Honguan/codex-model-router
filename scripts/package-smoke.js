@@ -13,11 +13,22 @@ const runNpm = (args, options) => exec(process.execPath, [npmCli, ...args], opti
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const temporary = await mkdtemp(join(tmpdir(), "codex-model-router-pack-"));
 
+function activeSandboxAssignments(content) {
+  return content.split(/\r?\n/)
+    .filter((line) => /^sandbox_mode\s*=\s*"[^"]+"\s*$/.test(line))
+    .map((line) => line.match(/^sandbox_mode\s*=\s*"([^"]+)"\s*$/)[1]);
+}
+
 try {
   const packageJson = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-  const packed = await runNpm(["pack", "--json", "--ignore-scripts"], { cwd: root });
-  const [{ filename }] = JSON.parse(packed.stdout);
-  const tarball = join(root, filename);
+  const packed = await runNpm(["pack", "--json", "--ignore-scripts", "--pack-destination", temporary], { cwd: root });
+  const packResult = JSON.parse(packed.stdout);
+  const packEntry = Array.isArray(packResult) ? packResult[0] : packResult?.[packageJson.name] ?? packResult;
+  const filename = packEntry?.filename;
+  if (typeof filename !== "string") {
+    throw new Error("npm pack --json output did not include a filename");
+  }
+  const tarball = join(temporary, filename);
   const project = join(temporary, "project");
   await mkdir(project, { recursive: true });
   await runNpm(["init", "-y"], { cwd: project });
@@ -31,10 +42,11 @@ try {
   assert.match(help.stdout, /npx codex-model-router install/);
   assert.match(help.stdout, /npx codex-model-router uninstall/);
   assert.match(help.stdout, /--set-default/);
+  assert.match(help.stdout, /--terra-fast/);
+  assert.match(help.stdout, /npx codex-model-router status/);
   assert.match(help.stdout, /--v2/);
   assert.match(help.stdout, /disabled by default/);
   assert.doesNotMatch(help.stdout, /\bv2 enable\b/);
-  assert.doesNotMatch(help.stdout, /\bstatus\b/);
   assert.doesNotMatch(help.stdout, /--dry-run/);
 
   await assert.rejects(
@@ -43,16 +55,21 @@ try {
   );
   await assert.rejects(access(join(project, ".codex")));
 
-  await exec(process.execPath, [binary, "install", "--v2"], { cwd: project });
+  await exec(process.execPath, [binary, "install", "--v2", "--terra-fast"], { cwd: project });
   const config = await readFile(join(project, ".codex", "config.toml"), "utf8");
-  assert.match(config, /\[features\.multi_agent_v2\]/);
-  assert.match(config, /tool_namespace = "agents"/);
+  assert.match(config, /\[features\.multi_agent_v2\]\nenabled = true\nhide_spawn_agent_metadata = false\ntool_namespace = "agents"/);
+  assert.doesNotMatch(config, /\[codex\]/);
   await access(join(project, ".codex", "model-router-v2-state.json"));
   assert.match(await readFile(join(project, ".codex", "agents", "terra.toml"), "utf8"), /gpt-5\.6-terra/);
+  assert.match(await readFile(join(project, ".codex", "agents", "terra.toml"), "utf8"), /^# codex-model-router-fast = true$/m);
   assert.match(await readFile(join(project, ".codex", "agents", "luna.toml"), "utf8"), /model_reasoning_effort = "xhigh"/);
-  assert.match(await readFile(join(project, ".codex", "agents", "sol.toml"), "utf8"), /sandbox_mode = "read-only"/);
+  const solTemplate = await readFile(join(project, ".codex", "agents", "sol.toml"), "utf8");
+  assert.deepEqual(activeSandboxAssignments(solTemplate), ["workspace-write"]);
   assert.match(await readFile(join(project, ".codex", "skills", "model-router", "SKILL.md"), "utf8"), /REQUIREMENT_EVIDENCE/);
   assert.match(await readFile(join(project, ".codex", "skills", "implementation-planning", "SKILL.md"), "utf8"), /EVIDENCE_VERSION/);
+
+  const status = await exec(process.execPath, [binary, "status"], { cwd: project });
+  assert.match(status.stdout, /Terra fast: configured=true, effective=not-supported, state=managed/);
 
   await exec(process.execPath, [binary, "install"], { cwd: project });
   await assert.rejects(access(join(project, ".codex", "model-router-v2-state.json")));
@@ -62,7 +79,6 @@ try {
   await exec(process.execPath, [binary, "uninstall"], { cwd: project });
   await assert.rejects(access(join(project, ".codex")));
   await assert.rejects(access(join(project, ".agents")));
-  await rm(tarball, { force: true });
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

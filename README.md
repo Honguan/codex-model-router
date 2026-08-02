@@ -43,7 +43,8 @@ npx codex-model-router@latest install --v2
 npx codex-model-router@latest install \
   --terra-reasoning high \
   --luna-reasoning xhigh \
-  --sol-reasoning medium
+  --sol-reasoning medium \
+  --terra-fast
 ```
 
 | 選項 | 用途 |
@@ -53,10 +54,16 @@ npx codex-model-router@latest install \
 | `--terra-reasoning <level>` | 設定 Terra 思考等級 |
 | `--luna-reasoning <level>` | 設定 Luna 思考等級 |
 | `--sol-reasoning <level>` | 設定 Sol 思考等級 |
+| `--agent-fast`／`--no-agent-fast` | 對所有受管理子代理設定 Fast 偏好；個別角色選項優先 |
+| `--terra-fast`／`--no-terra-fast` | 設定 Terra 的 Fast 偏好 |
+| `--luna-fast`／`--no-luna-fast` | 設定 Luna 的 Fast 偏好 |
+| `--sol-fast`／`--no-sol-fast` | 設定 Sol 的 Fast 偏好 |
 | `--v2` | 啟用或修復套件管理的 V2 |
 | `--global` | 套用到目前使用者 |
 
 可用思考等級：`none`、`low`、`medium`、`high`、`xhigh`、`max`。
+
+Fast 與思考等級是獨立設定，且僅保存到同一個子代理角色；不會影響主代理或其他角色。可用 `npx codex-model-router@latest status [--global]` 查看 `configured` 與 `effective`。目前 Codex 沒有每子代理 Fast 的執行階段控制，因此 `configured=true` 會明確顯示 `effective=not-supported`；安裝器不會啟用全域 `fast_mode`，也不會把 Fast 改寫成思考等級。
 
 ## 圖解說明
 
@@ -115,10 +122,26 @@ npx codex-model-router@latest install \
 
 - 同一個工作流程不重複啟動相同模型代理。
 - 主模型與代理角色相同時，由主線程直接完成該角色工作。
-- Luna 是唯一可寫入的角色。
+- Luna、Terra、Sol 都具備寫入能力，但只能由升級狀態與執行旗標授權寫入。
 - Terra 負責企劃與獨立驗證。
 - Sol 僅在驗證結果不是 PASS 時介入。
 - 最終回覆一律回到主模型。
+
+## 工作流程恢復契約
+
+恢復是由主機提供的宣告式契約消費流程；套件不提供 JavaScript 執行階段 API、CLI 或子代理程序持久化。主機提供有效角色、目前主模型、executor 與拓撲；超過兩個子代理槽位時回報 `EVIDENCE_GAP`，不採取未證實動作。
+
+狀態檔固定為 `RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`。登錄是根層 `{version?, root_session_id, workflow_id, agents:{[role]:{agent_id,status,handoff}}, diagnostics?}`；`agents` 必須是以角色為 key 的物件，不得是陣列，也不得巢狀 `root`/`workflow`。只使用精確 ID；未知或模糊的 ID 不得替換。相同主模型、停用、無效（政策無效）、主模型切換或多餘實例一律 `removed-by-policy`；其餘每個已保存實例恰有一個結果：`reused`、`replaced`、`removed-by-policy`、`resume-failed`、`not-supported`、`stale-workflow` 或 `invalid-agent-id`。
+
+只有主機確認實例遺失、關閉、無效、該實例不支援或恢復失敗，且主機明確建立新實例並獲政策允許時才可替換；handoff 必須原樣保留。主模型所在主線程（不論選定模型）負責登錄載入、原子持久化與 runtime 協調；Terra/Sol 子角色及企劃僅讀取登錄，Luna 只負責 workspace/PLAN 寫入。寫入使用同目錄暫存檔的 flush、close、rename 原子順序；任一步驟失敗便保留先前登錄、不發布 partial state，也不執行相依動作。這些是模板契約測試，不是 live E2E。
+
+## 工作流程升級狀態機
+
+每個 task 另以 `WORKFLOW_STATE_PATH=<ARTIFACT_DIR>/workflow-state.v1.json` 持久化 task-scoped 狀態，與 recovery registry 分離。狀態包含 workflow/root ID、需求/證據/企劃版本、目前 stage、最新 verdict、主模型、Sol 審查失敗次數、Terra 執行次數、三個執行旗標、active role IDs、所有角色 ownership 與 `blocked_reason`。同一工作流程切換主模型不重置版本、計數、stage 或停用旗標；新 workflow 才建立初始狀態。
+
+Stage 單調為 `INITIAL` → `SOL_REPLAN_WITH_LUNA` → `SOL_PLAN_REVIEW_WITH_TERRA` → `SOL_FULL_TAKEOVER`。`PASS` 終止；`EVIDENCE_GAP`/`REQUIREMENT_CLARIFICATION` 留在原 stage 且不嘗試執行或增加計數；只有 `FAIL_PLAN`/`FAIL_IMPLEMENTATION` 推進。Luna/Terra 主模型先由 Terra 規劃審查、Luna 執行；primary Sol 的 INITIAL 不建立 Luna，只使用 Terra 子代理。Luna 首次停用後 Terra 最多執行兩次，仍失敗便永久停用 Terra 並由 Sol 接管。
+
+所有角色 TOML 具 workspace-write 能力，但寫入由 stage 與旗標限制：Sol 在 `SOL_FULL_TAKEOVER` 前唯讀，停用的 primary 永久為 coord-only；最多兩個子代理、不得建立與主模型同模型的 child，且只在 stage 要求時 spawn。主線程負責 atomic flush/close/rename；失敗時保留先前狀態、不發布 partial state、不執行相依動作。這是主機消費的 declarative contract，不提供 runtime API、CLI 或 live E2E。
 
 ## V2 行為
 

@@ -1,35 +1,91 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TEMPLATES } from "../lib/manifest.js";
+import { LEGACY_TEMPLATES, TEMPLATES } from "../lib/manifest.js";
 
-test("Luna reads requirements and remains the single writable role", () => {
+function activeSandboxAssignments(content) {
+  return content.split(/\r?\n/)
+    .filter((line) => /^sandbox_mode\s*=\s*"[^"]+"\s*$/.test(line))
+    .map((line) => line.match(/^sandbox_mode\s*=\s*"([^"]+)"\s*$/)[1]);
+}
+
+test("Luna remains permanently gated by its task-scoped execution flag", () => {
   assert.match(TEMPLATES.luna.content, /REQUIREMENT_EVIDENCE/);
   assert.match(TEMPLATES.luna.content, /one persistent Luna role/);
-  assert.match(TEMPLATES.luna.content, /sandbox_mode = "workspace-write"/);
+  assert.deepEqual(activeSandboxAssignments(TEMPLATES.luna.content), ["workspace-write"]);
+  assert.match(TEMPLATES.luna.content, /luna_execution_enabled/);
+  assert.match(TEMPLATES.luna.content, /disabled Luna remains coord-only permanently/);
   assert.match(TEMPLATES.luna.content, /Do not self-approve/);
 });
 
-test("Terra plans and verifies without implementation writes", () => {
-  assert.match(TEMPLATES.terra.content, /PLAN\.md/);
+test("Terra has workspace-write capability with a contract execution gate", () => {
+  assert.match(TEMPLATES.terra.content, /ARTIFACT_DIR/);
+  assert.match(TEMPLATES.terra.content, /absolute PLAN_PATH/);
+  assert.match(TEMPLATES.terra.content, /do not write PLAN_PATH/);
   assert.match(TEMPLATES.terra.content, /FAIL_IMPLEMENTATION/);
   assert.match(TEMPLATES.terra.content, /FAIL_PLAN/);
-  assert.match(TEMPLATES.terra.content, /sandbox_mode = "read-only"/);
-  assert.match(TEMPLATES.terra.content, /Never edit implementation files/);
+  assert.deepEqual(activeSandboxAssignments(TEMPLATES.terra.content), ["workspace-write"]);
+  assert.match(TEMPLATES.terra.content, /terra_execution_enabled/);
+  assert.match(TEMPLATES.terra.content, /otherwise remain read-only/);
 });
 
-test("Sol is a read-only non-PASS replanner", () => {
+test("Sol is contract-gated read-only before full takeover", () => {
   assert.match(TEMPLATES.sol.content, /non-PASS verification verdict/);
-  assert.match(TEMPLATES.sol.content, /Rewrite only affected PLAN\.md sections/);
-  assert.match(TEMPLATES.sol.content, /sandbox_mode = "read-only"/);
-  assert.match(TEMPLATES.sol.content, /Do not edit implementation files/);
+  assert.match(TEMPLATES.sol.content, /complete revised plan content/);
+  assert.match(TEMPLATES.sol.content, /do not write PLAN_PATH/);
+  assert.match(TEMPLATES.sol.content, /same Luna role/);
+  assert.deepEqual(activeSandboxAssignments(TEMPLATES.sol.content), ["workspace-write"]);
+  assert.match(TEMPLATES.sol.content, /SOL_FULL_TAKEOVER/);
+  assert.match(TEMPLATES.sol.content, /sol_full_takeover/);
+  assert.match(TEMPLATES.sol.content, /read-only for planning and review before full takeover/);
 });
 
-test("router reuses matching primary models and bounds correction", () => {
+test("agent templates have one active workspace-write assignment without a read-only fallback comment", () => {
+  for (const name of ["terra", "luna", "sol"]) {
+    const content = TEMPLATES[name].content;
+    assert.deepEqual(activeSandboxAssignments(content), ["workspace-write"], `${name} must have one active sandbox assignment`);
+    assert.doesNotMatch(content, /^\s*#.*sandbox_mode\s*=\s*"read-only"/m, `${name} must not use a commented sandbox fallback`);
+  }
+});
+
+test("router uses matching primary inline and task-scoped escalation stages", () => {
   const skill = TEMPLATES.skill.content;
   assert.match(skill, /Never launch duplicate same-model agents/);
   assert.match(skill, /If the primary is Luna/);
   assert.match(skill, /If the primary is Terra/);
   assert.match(skill, /If the primary is Sol/);
-  assert.match(skill, /never exceed three total implementation-verification cycles/);
+  assert.match(skill, /SOL_REPLAN_WITH_LUNA/);
+  assert.match(skill, /terra_execution_attempts/);
+  assert.match(skill, /blocked verdicts never attempt execution/);
   assert.match(skill, /ordinary questions, explanations, read-only analysis/);
+});
+
+test("all current templates carry the temporary artifact and exact plan-path contract", () => {
+  const contracts = [
+    ["terra", [/ARTIFACT_DIR/, /absolute PLAN_PATH/, /outside the workspace/, /do not write PLAN_PATH/]],
+    ["luna", [/same absolute ARTIFACT_DIR/, /exact absolute PLAN_PATH/, /write it only to that exact PLAN_PATH/, /relative fallback/]],
+    ["sol", [/same absolute ARTIFACT_DIR/, /exact absolute PLAN_PATH/, /complete revised plan content/, /do not write PLAN_PATH/]],
+    ["skill", [/one unique absolute ARTIFACT_DIR/, /one absolute PLAN_PATH/, /exact same values to every role/, /best-effort cleanup/]],
+    ["planning", [/exact absolute ARTIFACT_DIR\/PLAN_PATH/, /unchanged and outside the workspace/, /relative or missing path/]]
+  ];
+
+  for (const [name, patterns] of contracts) {
+    const content = TEMPLATES[name].content;
+    for (const pattern of patterns) assert.match(content, pattern, `${name} missing ${pattern}`);
+    assert.doesNotMatch(content, /workspace PLAN\.md|workspace\/PLAN\.md|workspace\\PLAN\.md/i);
+    assert.doesNotMatch(content, /fallback.*PLAN\.md/i);
+  }
+});
+
+test("pre-change current templates remain recognized for safe migration", () => {
+  const legacyEvidence = [
+    ["terra", /For planning, write or update the compact implementation-ready PLAN\.md/],
+    ["luna", /Implementation stage: reread the complete latest PLAN\.md/],
+    ["sol", /Rewrite only affected PLAN\.md sections/],
+    ["skill", /Terra writes or updates the complete PLAN\.md/],
+    ["planning", /Produce one compact current PLAN\.md snapshot/]
+  ];
+
+  for (const [name, pattern] of legacyEvidence) {
+    assert.ok(LEGACY_TEMPLATES[name].some((content) => pattern.test(content)), `${name} legacy template is missing`);
+  }
 });

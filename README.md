@@ -30,7 +30,7 @@ Enable the package-managed V2 configuration during installation:
 npx codex-model-router@latest install --v2
 ```
 
-Use `--global --v2` for the current user. Without `--v2`, a fresh installation does not enable V2. Pre-existing or user-modified V2 configuration is preserved rather than replaced.
+Use `--global --v2` for the current user. `install --v2` enables package-managed V2; `install` without `--v2` disables an unchanged package-managed V2 block. Pre-existing, untracked, or user-modified V2 configuration is preserved rather than replaced or removed.
 
 Set Terra/high as the primary default:
 

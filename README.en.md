@@ -141,8 +141,9 @@ flowchart TD
 
 - The same model is not spawned twice in one workflow.
 - A matching primary model performs that role in the primary thread.
-- Stage and execution flags gate writes; pre-takeover planning/review roles return content without writing the plan artifact.
+- Stage and Luna mode gate writes; `luna_execution_enabled` is migration-only and cannot replace the mode.
 - Terra plans and independently verifies; Sol joins after a non-PASS result.
+- Luna keeps the same `luna_role_id` for the root session/workflow; after demotion it runs only stage-authorized canonical action IDs as `INTERACTION_ONLY`.
 - The final response always returns through the primary model.
 
 ## Workflow contract
@@ -153,7 +154,7 @@ This is a declarative host contract; the package does not persist child processe
 
 - `RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`; registry `agents` is an object keyed by role.
 - The host supplies the primary, executor, and at most two child roles; more than two returns `EVIDENCE_GAP` without mutation.
-- Reuse an exact resumable ID. Replace only when the host confirms it is unusable and allows creation; preserve the handoff.
+- Reuse an exact same-workflow Luna ID even after demotion to `INTERACTION_ONLY`. Replace only when the host confirms it is unusable and allows creation; preserve the handoff. Never carry an identity into a new workflow, root session, or workspace.
 - The primary thread loads, saves, and coordinates; the active writable executor owns PLAN.md. A write failure keeps the previous state.
 
 ### Escalation
@@ -164,10 +165,20 @@ Each task stores stage, verdict, counters, flags, and ownership at `WORKFLOW_STA
 | --- | --- | --- |
 | `INITIAL` | Primary confirms → Luna reads/executes → Terra plans/reviews | Current writable executor |
 | `SOL_REPLAN_WITH_LUNA` | Sol revises → Luna corrects → Terra reviews | Luna |
-| `SOL_PLAN_REVIEW_WITH_TERRA` | Disable Luna; Sol plans/reviews → Terra executes | Terra |
-| `SOL_FULL_TAKEOVER` | Disable Terra; Sol completes the task | Sol |
+| `SOL_PLAN_REVIEW_WITH_TERRA` | Retain Luna as `INTERACTION_ONLY`; Sol plans/reviews → Terra executes | Terra |
+| `SOL_FULL_TAKEOVER` | Retain Luna as `INTERACTION_ONLY`; disable Terra writes; Sol completes the task | Sol |
 
-`PASS` terminates through the current primary; `EVIDENCE_GAP` and `REQUIREMENT_CLARIFICATION` stay in the same stage without consuming an attempt. No matching-model child is created, at most two children are active, and Stage 4 never re-enables an executor.
+`PASS` terminates through the current primary; `EVIDENCE_GAP` and `REQUIREMENT_CLARIFICATION` stay in the same stage without consuming an attempt. No matching-model child is created, at most two children are active, and Stage 4 never re-enables a source executor but may retain Luna as an interaction child.
+
+### Luna interaction modes
+
+| Mode | Authority |
+| --- | --- |
+| `ACTIVE_EXECUTOR` | Stage-gated source/PLAN writes and authorized work |
+| `INTERACTION_ONLY` | No source/PLAN writes, decisions, or self-approval; only host-supplied action IDs |
+| `DETACHED` | No actions |
+
+Interaction results include action, command, cwd, exit code, summary, evidence, artifact refs, and redactions; large output belongs in artifacts and secrets are redacted first.
 
 ### PLAN.md lifecycle
 

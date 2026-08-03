@@ -20,6 +20,14 @@ function state(overrides = {}) {
     sol_review_failures: 0,
     terra_execution_attempts: 0,
     luna_execution_enabled: true,
+    luna_mode: "ACTIVE_EXECUTOR",
+    luna_role_id: "agent-luna-1",
+    luna_context_version: 1,
+    luna_workspace: "workspace-1",
+    luna_allowed_actions: [],
+    luna_stage_authorized_actions: [],
+    luna_user_approval_actions: [],
+    luna_forbidden_actions: [],
     terra_execution_enabled: true,
     sol_full_takeover: false,
     active_role_ids: { terra: null, luna: null, sol: null },
@@ -53,7 +61,18 @@ const matchers = Object.freeze({
 function applyCounterDirectives(next, directives) {
   for (const directive of directives.split(";")) {
     if (!directive || directive === "none" || directive === "preserve") continue;
-    if (directive === "reset") return state({ workflow_id: next.workflow_id, root_session_id: next.root_session_id, primary_model: next.primary_model });
+    if (directive === "reset") return state({
+      workflow_id: next.workflow_id,
+      root_session_id: next.root_session_id,
+      primary_model: next.primary_model,
+      luna_role_id: null,
+      luna_context_version: 0,
+      luna_workspace: null,
+      luna_allowed_actions: [],
+      luna_stage_authorized_actions: [],
+      luna_user_approval_actions: [],
+      luna_forbidden_actions: []
+    });
     if (directive === "disable-luna") next.luna_execution_enabled = false;
     else if (directive === "disable-terra") next.terra_execution_enabled = false;
     else if (directive === "enable-sol-full") next.sol_full_takeover = true;
@@ -76,6 +95,7 @@ function interpret(context) {
   const next = structuredClone(context.state);
   next.latest_verdict = context.verdict ?? next.latest_verdict;
   if (candidate.match === "PRIMARY_SWITCH") next.primary_model = context.primaryModel;
+  if (candidate.lunaMode && candidate.lunaMode !== "preserve") next.luna_mode = candidate.lunaMode;
   if (candidate.match === "NEW_WORKFLOW") {
     if (context.workflowId) next.workflow_id = context.workflowId;
     if (context.rootSessionId) next.root_session_id = context.rootSessionId;
@@ -93,7 +113,6 @@ function interpret(context) {
 
 function topology(primary, stage, validRoles) {
   if (validRoles.length > contract.maxChildren) return { evidenceGap: true, children: [] };
-  if (stage === "SOL_FULL_TAKEOVER") return { evidenceGap: false, children: [] };
   return { evidenceGap: false, children: validRoles.filter((role) => role !== primary) };
 }
 
@@ -106,10 +125,10 @@ const initialChildren = Object.freeze({
 
 function stageState(primary, stage, overrides = {}) {
   const stageDefaults = {
-    INITIAL: {},
-    SOL_REPLAN_WITH_LUNA: {},
-    SOL_PLAN_REVIEW_WITH_TERRA: { luna_execution_enabled: false, sol_review_failures: 1 },
-    SOL_FULL_TAKEOVER: { luna_execution_enabled: false, terra_execution_enabled: false, sol_full_takeover: true, sol_review_failures: 3, terra_execution_attempts: 2 }
+    INITIAL: { luna_mode: contract.lunaModeByStage.INITIAL },
+    SOL_REPLAN_WITH_LUNA: { luna_mode: contract.lunaModeByStage.SOL_REPLAN_WITH_LUNA },
+    SOL_PLAN_REVIEW_WITH_TERRA: { luna_execution_enabled: false, luna_mode: contract.lunaModeByStage.SOL_PLAN_REVIEW_WITH_TERRA, sol_review_failures: 1 },
+    SOL_FULL_TAKEOVER: { luna_execution_enabled: false, luna_mode: contract.lunaModeByStage.SOL_FULL_TAKEOVER, terra_execution_enabled: false, sol_full_takeover: true, sol_review_failures: 3, terra_execution_attempts: 2 }
   };
   return state({ primary_model: primary, current_stage: stage, ...stageDefaults[stage], ...overrides });
 }
@@ -124,12 +143,12 @@ test("production structured contract is immutable and generated prose contains i
   assert.deepEqual(contract.stages, ["INITIAL", "SOL_REPLAN_WITH_LUNA", "SOL_PLAN_REVIEW_WITH_TERRA", "SOL_FULL_TAKEOVER"]);
   assert.deepEqual(contract.atomicSteps, ["flush", "close", "rename"]);
   assert.deepEqual(Object.keys(state()).sort(), [...contract.requiredStateFields].sort());
-  for (const template of Object.values(TEMPLATES)) {
-    for (const ruleItem of contract.transitionRules) assert.match(template.content, new RegExp(ruleItem.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-    for (const switchRule of contract.switchRules) assert.match(template.content, new RegExp(switchRule.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-    for (const ruleItem of contract.topologyRules) assert.match(template.content, new RegExp(ruleItem.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-    for (const ruleItem of contract.authorityRules) assert.match(template.content, new RegExp(ruleItem.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  }
+  const production = TEMPLATES.skill.content;
+  for (const ruleItem of contract.transitionRules) assert.match(production, new RegExp(ruleItem.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const switchRule of contract.switchRules) assert.match(production, new RegExp(switchRule.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const ruleItem of contract.topologyRules) assert.match(production, new RegExp(ruleItem.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const ruleItem of contract.authorityRules) assert.match(production, new RegExp(ruleItem.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const template of Object.values(TEMPLATES)) assert.match(template.content, /current stage, Luna mode, workspace, and applicable canonical action IDs/);
 });
 
 test("generic table interpreter covers PASS and blocked verdicts without attempts", () => {
@@ -159,6 +178,7 @@ test("generic interpreter covers primary Luna/Terra escalation and counters", ()
   assert.equal(solFail.state.current_stage, "SOL_PLAN_REVIEW_WITH_TERRA");
   assert.equal(solFail.state.sol_review_failures, 1);
   assert.equal(solFail.state.luna_execution_enabled, false);
+  assert.equal(solFail.state.luna_mode, "INTERACTION_ONLY");
 
   const terra1 = interpret({ state: solFail.state, verdict: "FAIL_PLAN" });
   assert.equal(terra1.rule.match, rule("TERRA_ATTEMPT_1_FAIL").match);
@@ -182,6 +202,7 @@ test("primary Sol uses the universal INITIAL flow and two Terra attempts", () =>
   assert.equal(solFail.rule.match, rule("SOL_REPLAN_FAIL").match);
   assert.equal(solFail.state.current_stage, "SOL_PLAN_REVIEW_WITH_TERRA");
   assert.equal(solFail.state.luna_execution_enabled, false);
+  assert.equal(solFail.state.luna_mode, "INTERACTION_ONLY");
   const terra1 = interpret({ state: solFail.state, verdict: "FAIL_IMPLEMENTATION" });
   assert.equal(terra1.rule.match, rule("TERRA_ATTEMPT_1_FAIL").match);
   assert.equal(terra1.state.terra_execution_attempts, 1);
@@ -195,7 +216,7 @@ test("primary Sol uses the universal INITIAL flow and two Terra attempts", () =>
 test("topology enforces two children, no matching primary, and stage-required spawn", () => {
   assert.deepEqual(topology("sol", "INITIAL", ["luna", "terra"]), { evidenceGap: false, children: ["luna", "terra"] });
   assert.deepEqual(topology("luna", "INITIAL", ["luna", "terra", "sol"]), { evidenceGap: true, children: [] });
-  assert.deepEqual(topology("terra", "SOL_FULL_TAKEOVER", ["luna", "sol"]), { evidenceGap: false, children: [] });
+  assert.deepEqual(topology("terra", "SOL_FULL_TAKEOVER", ["luna", "sol"]), { evidenceGap: false, children: ["luna", "sol"] });
   const blocked = interpret({ state: state(), verdict: "EVIDENCE_GAP", validRoles: ["terra", "sol"] });
   assert.deepEqual(blocked.spawned, []);
 });
@@ -225,10 +246,11 @@ test("every primary follows the universal topology and disabled-executor policy"
       assert.deepEqual(topology(primary, stage, initialChildren[primary]), { evidenceGap: false, children: initialChildren[primary] });
     }
 
-    const stage3Roles = primary === "sol" ? ["terra"] : primary === "terra" ? ["sol"] : ["terra", "sol"];
+    const stage3Roles = primary === "sol" ? ["luna", "terra"] : primary === "terra" ? ["luna", "sol"] : ["terra", "sol"];
     const stage3 = topology(primary, "SOL_PLAN_REVIEW_WITH_TERRA", stage3Roles);
     assert.deepEqual(stage3, { evidenceGap: false, children: stage3Roles }, `${primary} keeps only enabled Stage 3 roles`);
-    assert.deepEqual(topology(primary, "SOL_FULL_TAKEOVER", stage3Roles), { evidenceGap: false, children: [] });
+    const fullRoles = primary === "sol" ? ["luna"] : primary === "luna" ? ["sol"] : stage3Roles;
+    assert.deepEqual(topology(primary, "SOL_FULL_TAKEOVER", fullRoles), { evidenceGap: false, children: fullRoles }, `${primary} retains Luna interaction topology`);
     assert.equal(stage3.children.includes(primary), false, `${primary} must not have a matching child`);
   }
 });
@@ -254,6 +276,7 @@ test("every primary follows the complete failure escalation chain", () => {
     assert.equal(replan.rule.match, rule("SOL_REPLAN_FAIL").match);
     assert.equal(replan.state.current_stage, "SOL_PLAN_REVIEW_WITH_TERRA");
     assert.equal(replan.state.luna_execution_enabled, false);
+    assert.equal(replan.state.luna_mode, "INTERACTION_ONLY");
 
     const terraAttempt1 = interpret({ state: replan.state, verdict: "FAIL_IMPLEMENTATION" });
     assert.equal(terraAttempt1.rule.match, rule("TERRA_ATTEMPT_1_FAIL").match);
@@ -265,6 +288,7 @@ test("every primary follows the complete failure escalation chain", () => {
     assert.equal(terraAttempt2.state.current_stage, "SOL_FULL_TAKEOVER");
     assert.equal(terraAttempt2.state.terra_execution_enabled, false);
     assert.equal(terraAttempt2.state.sol_full_takeover, true);
+    assert.equal(terraAttempt2.state.luna_mode, "INTERACTION_ONLY");
     assert.equal(finalReplyOwner(terraAttempt2.state), primary);
   }
 });
@@ -286,7 +310,7 @@ test("blocking verdicts preserve every primary stage without consuming an attemp
   }
 });
 
-test("disabled primary remains coord-only, new workflow resets, and recovery projection is not duplicated", () => {
+test("disabled primary remains coord-only, new workflow resets Luna binding, and recovery projection is not duplicated", () => {
   const disabled = state({ primary_model: "terra", terra_execution_enabled: false, role_ownership: { terra: "coord-only", luna: "disabled", sol: "child" } });
   assert.equal(disabled.role_ownership.terra, "coord-only");
   assert.equal(disabled.terra_execution_enabled, false);
@@ -297,6 +321,10 @@ test("disabled primary remains coord-only, new workflow resets, and recovery pro
   assert.equal(fresh.state.current_stage, "INITIAL");
   assert.equal(fresh.state.sol_review_failures, 0);
   assert.equal(fresh.state.terra_execution_attempts, 0);
+  assert.equal(fresh.state.luna_mode, "ACTIVE_EXECUTOR");
+  assert.equal(fresh.state.luna_role_id, null);
+  assert.equal(fresh.state.luna_workspace, null);
+  assert.equal(fresh.state.luna_context_version, 0);
   assert.equal(contract.requiredStateFields.includes("agents"), false);
   assert.deepEqual(WORKFLOW_RECOVERY_CONTRACT.requiredRootFields, ["root_session_id", "workflow_id", "agents"]);
 });

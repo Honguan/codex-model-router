@@ -15,14 +15,16 @@ function writableOwner({ stage, primary = "luna", lunaEnabled = true, terraEnabl
   return lunaEnabled ? "luna" : null;
 }
 
-test("the immutable plan-artifact contract defines scoped state, lifecycle, and every template", () => {
+test("the immutable plan-artifact contract is complete in the primary skill and referenced by role prompts", () => {
   assert.equal(Object.isFrozen(contract), true);
   assert.deepEqual(contract.stateFields, ["plan_path", "plan_artifact_owner", "plan_cleanup_owner", "plan_cleanup_required", "plan_artifact_status"]);
   assert.deepEqual(contract.statuses, ["missing", "pending-write", "active", "pending-cleanup", "retained", "removed", "cleanup-failed"]);
   assert.equal(contract.path, "<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md");
-  for (const template of Object.values(TEMPLATES)) {
-    for (const field of contract.stateFields) assert.match(template.content, new RegExp(field));
-    for (const rule of contract.ownershipRules) assert.match(template.content, new RegExp(rule.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const field of contract.stateFields) assert.match(TEMPLATES.skill.content, new RegExp(field));
+  for (const rule of contract.ownershipRules) assert.match(TEMPLATES.skill.content, new RegExp(rule.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const [name, template] of Object.entries(TEMPLATES)) {
+    assert.match(template.content, /PLAN_ARTIFACT_PATH/, `${name} path reference`);
+    if (name !== "skill") assert.doesNotMatch(template.content, /Plan artifact \(declarative host contract/);
   }
 });
 

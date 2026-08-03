@@ -78,17 +78,24 @@ test("the exported structured contract is declarative and drives every template 
   assert.match(production, /primary thread.*regardless of selected model.*owns RECOVERY_STATE_PATH/s);
 });
 
-test("all installed templates carry the root registry and atomic failure contract (contract fixture; not live E2E)", () => {
+test("the primary skill owns the full recovery contract and role prompts use only the compact gate (contract fixture; not live E2E)", () => {
+  const production = TEMPLATES.skill.content;
+  assert.match(production, /RECOVERY_STATE_PATH=<ARTIFACT_DIR>\/recovery-state\.v1\.json/);
+  assert.match(production, /root_session_id/);
+  assert.match(production, /workflow_id/);
+  assert.match(production, /agents.*role.*agent_id.*status.*handoff/s);
+  assert.match(production, /agents must be an object, never an array/i);
+  assert.match(production, /flush.*close.*rename/s);
+  assert.match(production, /prior registry/);
+  assert.match(production, /no dependent action/);
+  assert.match(production, /Never claim process persistence/);
   for (const [name, template] of Object.entries(TEMPLATES)) {
-    assert.match(template.content, /RECOVERY_STATE_PATH=<ARTIFACT_DIR>\/recovery-state\.v1\.json/, `${name} state path`);
-    assert.match(template.content, /root_session_id/);
-    assert.match(template.content, /workflow_id/);
-    assert.match(template.content, /agents.*role.*agent_id.*status.*handoff/s);
-    assert.match(template.content, /agents must be an object, never an array/i);
-    assert.match(template.content, /flush.*close.*rename/s, `${name} atomic write sequence`);
-    assert.match(template.content, /prior registry/);
-    assert.match(template.content, /no dependent action/);
-    assert.match(template.content, /Never claim process persistence/);
+    assert.match(template.content, /current stage, Luna mode, workspace, and applicable canonical action IDs/, `${name} action gate`);
+    if (name !== "skill") {
+      assert.doesNotMatch(template.content, /Workflow recovery \(declarative host contract/);
+      assert.doesNotMatch(template.content, /Workflow escalation \(declarative host contract/);
+      assert.doesNotMatch(template.content, /Plan artifact \(declarative host contract/);
+    }
   }
 });
 
@@ -202,10 +209,10 @@ test("policy removal handles primary switch, disabled executor, and extra saved 
   assert.deepEqual(extra.actions, []);
 });
 
-test("resume policy covers each primary with Luna disabled and Terra disabled", () => {
+test("resume policy retains Luna as an interaction-only role after demotion", () => {
   const stage3Roles = Object.freeze({
-    sol: ["terra"],
-    terra: ["sol"],
+    sol: ["luna", "terra"],
+    terra: ["luna", "sol"],
     luna: ["terra", "sol"]
   });
   const saved = registry({
@@ -220,28 +227,35 @@ test("resume policy covers each primary with Luna disabled and Terra disabled", 
   };
 
   for (const primary of ["sol", "terra", "luna"]) {
+    const primarySaved = primary === "luna"
+      ? registry({
+        terra: { agent_id: "agent-terra", status: "saved", handoff: "terra" },
+        sol: { agent_id: "agent-sol", status: "saved", handoff: "sol" }
+      })
+      : saved;
     const resumed = evaluateRecovery({
       validRoles: stage3Roles[primary],
-      disabledRoles: ["luna"],
-      saved,
+      saved: primarySaved,
       runtime
     });
-    assert.equal(resumed.results.luna, "removed-by-policy", `${primary} keeps Luna disabled`);
+    if (primary !== "luna") assert.equal(resumed.results.luna, "reused", `${primary} retains exact Luna ID`);
     for (const role of stage3Roles[primary]) assert.equal(resumed.results[role], "reused", `${primary} reuses ${role}`);
   }
 
-  const fullTakeover = evaluateRecovery({
-    validRoles: [],
-    disabledRoles: ["luna", "terra"],
-    saved,
-    runtime
-  });
-  assert.deepEqual(fullTakeover.results, {
-    terra: "removed-by-policy",
-    luna: "removed-by-policy",
-    sol: "removed-by-policy"
-  });
-  assert.deepEqual(fullTakeover.actions, []);
+  for (const validRoles of [["luna"], ["luna", "sol"]]) {
+    const fullTakeover = evaluateRecovery({ validRoles, saved, runtime });
+    assert.equal(fullTakeover.results.luna, "reused");
+    assert.equal(fullTakeover.results.terra, validRoles.includes("terra") ? "reused" : "removed-by-policy");
+  }
+});
+
+test("same-workflow Luna recovery keeps identity while state carries mode and workspace", () => {
+  const saved = registry({ luna: { agent_id: "agent-luna-1", status: "saved", handoff: "interaction" } });
+  const resumed = evaluateRecovery({ validRoles: ["luna"], saved, runtime: { luna: { state: "resumable" } } });
+  assert.deepEqual(resumed.results, { luna: "reused" });
+  assert.deepEqual(resumed.actions, []);
+  assert.match(WORKFLOW_ESCALATION_CONTRACT.requiredStateFields.join(","), /luna_mode/);
+  assert.match(TEMPLATES.skill.content, /A valid same-workflow Luna ID remains reusable after demotion to INTERACTION_ONLY/);
 });
 
 test("invalid policy topology is an evidence gap with no mutation, results, or actions (contract fixture; not live E2E)", () => {

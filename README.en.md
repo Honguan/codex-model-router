@@ -149,7 +149,7 @@ flowchart TD
 
 ## Multi-Agent Workflow Overview
 
-![Multi-Agent Workflow Overview](docs/images/en/multi-agent-workflow-overview-en.png)
+![Multi-Agent Workflow Overview](docs/images/en/multi-agent-workflow-overview.png)
 
 ## V2
 

@@ -80,10 +80,10 @@ test("bilingual README workflow overview uses the dedicated diagrams", () => {
   assert.doesNotMatch(chinese, /primary Sol 的 INITIAL 不建立 Luna，只使用 Terra 子代理/);
   assert.doesNotMatch(english, /primary Sol INITIAL has no Luna child and uses Terra as the only child executor/);
   assert.match(chinese, /## 多代理工作流程總覽/);
-  assert.match(chinese, /docs\/images\/zh-TW\/multi-agent-workflow-overview-zh-TW\.png/);
+  assert.match(chinese, /docs\/images\/zh-TW\/multi-agent-workflow-overview\.png/);
   assert.doesNotMatch(chinese, /## 工作流程契約|SOL_REPLAN_WITH_LUNA|SOL_PLAN_REVIEW_WITH_TERRA|SOL_FULL_TAKEOVER/);
   assert.match(english, /## Multi-Agent Workflow Overview/);
-  assert.match(english, /docs\/images\/en\/multi-agent-workflow-overview-en\.png/);
+  assert.match(english, /docs\/images\/en\/multi-agent-workflow-overview\.png/);
   assert.doesNotMatch(english, /## Workflow contract|SOL_REPLAN_WITH_LUNA|SOL_PLAN_REVIEW_WITH_TERRA|SOL_FULL_TAKEOVER/);
 });
 

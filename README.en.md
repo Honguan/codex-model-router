@@ -147,57 +147,9 @@ flowchart TD
 - Luna keeps the same `luna_role_id` for the root session/workflow; after demotion it runs only stage-authorized canonical action IDs as `INTERACTION_ONLY`.
 - The final response always returns through the primary model.
 
-## Workflow contract
+## Multi-Agent Workflow Overview
 
-This is a declarative host contract; the package does not persist child processes or provide runtime persistence.
-
-### Recovery
-
-- `RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`; registry `agents` is an object keyed by role.
-- The host supplies the primary, executor, and at most two child roles; more than two returns `EVIDENCE_GAP` without mutation.
-- Reuse an exact same-workflow Luna ID even after demotion to `INTERACTION_ONLY`. Replace only when the host confirms it is unusable and allows creation; preserve the handoff. Never carry an identity into a new workflow, root session, or workspace.
-- The primary thread loads, saves, and coordinates; the active writable executor owns PLAN.md. A write failure keeps the previous state.
-
-### Escalation
-
-Each task stores stage, verdict, counters, flags, and ownership at `WORKFLOW_STATE_PATH=<ARTIFACT_DIR>/workflow-state.v1.json`; a same-task primary switch preserves them.
-
-| Stage | Flow | PLAN.md owner |
-| --- | --- | --- |
-| `INITIAL` | Primary confirms → Luna reads/executes → Terra plans/reviews | Current writable executor |
-| `SOL_REPLAN_WITH_LUNA` | Sol revises → Luna corrects → Terra reviews | Luna |
-| `SOL_PLAN_REVIEW_WITH_TERRA` | Retain Luna as `INTERACTION_ONLY`; Sol plans/reviews → Terra executes | Terra |
-| `SOL_FULL_TAKEOVER` | Retain Luna as `INTERACTION_ONLY`; disable Terra writes; Sol completes the task | Sol |
-
-`PASS` terminates through the current primary; `EVIDENCE_GAP` and `REQUIREMENT_CLARIFICATION` stay in the same stage without consuming an attempt. No matching-model child is created, at most two children are active, and Stage 4 never re-enables a source executor but may retain Luna as an interaction child.
-
-### Luna interaction modes
-
-| Mode | Authority |
-| --- | --- |
-| `ACTIVE_EXECUTOR` | Stage-gated source/PLAN writes and authorized work |
-| `INTERACTION_ONLY` | No source/PLAN writes, decisions, or self-approval; only host-supplied action IDs |
-| `DETACHED` | No actions |
-
-Interaction results include action, command, cwd, exit code, summary, evidence, artifact refs, and redactions; large output belongs in artifacts and secrets are redacted first.
-
-### Verification failure rollback
-
-For `FAIL_PLAN` or `FAIL_IMPLEMENTATION`, preserve valid diffs and evidence, classify the failure, then decide whether rollback is needed; correctable failures default to incremental correction, and unknown untracked files are never deleted automatically.
-
-| Class | Default policy |
-| --- | --- |
-| `CORRECTABLE` | `NONE`: use existing escalation and preserve valid work |
-| `SCOPE_VIOLATION`, `WORKSPACE_POLLUTION` | `SELECTIVE`: touch only identified, verified targets |
-| `WORKSPACE_CORRUPTION`, `DEPENDENCY_CORRUPTION`, `UNKNOWN_STATE` | `BLOCK_AND_ESCALATE`: stop advancement and preserve evidence |
-| `EXTERNAL_SIDE_EFFECT` | `EXTERNAL_SYSTEM`: complete compensating action first |
-| `SECURITY_RISK` | `ISOLATE_AND_ROLLBACK`: isolate, redact, and use an authorized handler |
-
-Evidence and pre-state must be persisted before rollback; a changed target hash becomes `STALE_TARGET`, and partial or failed rollback can never be treated as `PASS`.
-
-### PLAN.md lifecycle
-
-Each workflow uses only `<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md`. Only the active writable executor writes atomically; reviewers do not write it. After `PASS`, the same owner removes the directory. Blocking, resume, replacement, and primary switches preserve path, version, and owner; cleanup failure is stored as `cleanup-failed`.
+![Multi-Agent Workflow Overview](docs/images/en/multi-agent-workflow-overview-en.png)
 
 ## V2
 

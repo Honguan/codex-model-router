@@ -12,7 +12,6 @@ function writableOwner({ stage, primary = "luna", lunaEnabled = true, terraEnabl
   if (stage === "SOL_FULL_TAKEOVER") return solFullTakeover ? "sol" : null;
   if (stage === "SOL_PLAN_REVIEW_WITH_TERRA") return terraEnabled ? "terra" : null;
   if (stage === "SOL_REPLAN_WITH_LUNA") return lunaEnabled ? "luna" : null;
-  if (stage === "INITIAL" && primary === "sol") return terraEnabled ? "terra" : null;
   return lunaEnabled ? "luna" : null;
 }
 
@@ -29,7 +28,7 @@ test("the immutable plan-artifact contract defines scoped state, lifecycle, and 
 
 test("creation, revision, executor disablement, and takeover choose only an authorized writer", () => {
   assert.equal(writableOwner({ stage: "INITIAL", primary: "luna" }), "luna");
-  assert.equal(writableOwner({ stage: "INITIAL", primary: "sol" }), "terra");
+  assert.equal(writableOwner({ stage: "INITIAL", primary: "sol" }), "luna");
   assert.equal(writableOwner({ stage: "SOL_REPLAN_WITH_LUNA" }), "luna");
   assert.equal(writableOwner({ stage: "SOL_PLAN_REVIEW_WITH_TERRA", lunaEnabled: false }), "terra");
   assert.equal(writableOwner({ stage: "SOL_FULL_TAKEOVER", lunaEnabled: false, terraEnabled: false, solFullTakeover: true }), "sol");

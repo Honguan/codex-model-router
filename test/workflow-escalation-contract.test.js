@@ -42,12 +42,10 @@ function fromMatches(candidate, currentStage) {
 const matchers = Object.freeze({
   PASS: (context) => context.verdict === "PASS",
   BLOCK: (context) => blockedVerdicts.has(context.verdict),
-  INITIAL_FAIL_LUNA_OR_TERRA: (context) => context.state.current_stage === "INITIAL" && context.state.primary_model !== "sol" && failureVerdicts.has(context.verdict),
+  INITIAL_FAIL: (context) => context.state.current_stage === "INITIAL" && failureVerdicts.has(context.verdict),
   SOL_REPLAN_FAIL: (context) => context.state.current_stage === "SOL_REPLAN_WITH_LUNA" && failureVerdicts.has(context.verdict),
-  TERRA_ATTEMPT_1_FAIL: (context) => context.state.current_stage === "SOL_PLAN_REVIEW_WITH_TERRA" && context.state.primary_model !== "sol" && context.state.terra_execution_attempts === 0 && failureVerdicts.has(context.verdict),
-  TERRA_ATTEMPT_2_FAIL: (context) => context.state.current_stage === "SOL_PLAN_REVIEW_WITH_TERRA" && context.state.primary_model !== "sol" && context.state.terra_execution_attempts === 1 && failureVerdicts.has(context.verdict),
-  PRIMARY_SOL_INITIAL_FAIL: (context) => context.state.current_stage === "INITIAL" && context.state.primary_model === "sol" && failureVerdicts.has(context.verdict),
-  PRIMARY_SOL_TERRA_ATTEMPT_2_FAIL: (context) => context.state.current_stage === "SOL_PLAN_REVIEW_WITH_TERRA" && context.state.primary_model === "sol" && context.state.terra_execution_attempts === 1 && failureVerdicts.has(context.verdict),
+  TERRA_ATTEMPT_1_FAIL: (context) => context.state.current_stage === "SOL_PLAN_REVIEW_WITH_TERRA" && context.state.terra_execution_attempts === 0 && failureVerdicts.has(context.verdict),
+  TERRA_ATTEMPT_2_FAIL: (context) => context.state.current_stage === "SOL_PLAN_REVIEW_WITH_TERRA" && context.state.terra_execution_attempts === 1 && failureVerdicts.has(context.verdict),
   PRIMARY_SWITCH: (context) => context.event === "primary-switch",
   NEW_WORKFLOW: (context) => context.event === "new-workflow"
 });
@@ -95,7 +93,6 @@ function interpret(context) {
 
 function topology(primary, stage, validRoles) {
   if (validRoles.length > contract.maxChildren) return { evidenceGap: true, children: [] };
-  if (primary === "sol" && stage === "INITIAL") return { evidenceGap: false, children: ["terra"] };
   if (stage === "SOL_FULL_TAKEOVER") return { evidenceGap: false, children: [] };
   return { evidenceGap: false, children: validRoles.filter((role) => role !== primary) };
 }
@@ -132,7 +129,7 @@ test("generic table interpreter covers PASS and blocked verdicts without attempt
 
 test("generic interpreter covers primary Luna/Terra escalation and counters", () => {
   const initial = interpret({ state: state({ primary_model: "luna" }), verdict: "FAIL_PLAN" });
-  assert.equal(initial.rule.match, rule("INITIAL_FAIL_LUNA_OR_TERRA").match);
+  assert.equal(initial.rule.match, rule("INITIAL_FAIL").match);
   assert.equal(initial.state.current_stage, "SOL_REPLAN_WITH_LUNA");
   assert.equal(initial.state.luna_execution_enabled, true);
 
@@ -154,21 +151,28 @@ test("generic interpreter covers primary Luna/Terra escalation and counters", ()
   assert.equal(terra2.state.sol_full_takeover, true);
 });
 
-test("primary Sol INITIAL topology and two Terra attempts are data-driven", () => {
-  assert.deepEqual(topology("sol", "INITIAL", ["terra"]), { evidenceGap: false, children: ["terra"] });
+test("primary Sol uses the universal INITIAL flow and two Terra attempts", () => {
+  assert.deepEqual(topology("sol", "INITIAL", ["luna", "terra"]), { evidenceGap: false, children: ["luna", "terra"] });
   const first = interpret({ state: state({ primary_model: "sol" }), verdict: "FAIL_IMPLEMENTATION" });
-  assert.equal(first.rule.match, rule("PRIMARY_SOL_INITIAL_FAIL").match);
-  assert.equal(first.state.current_stage, "SOL_PLAN_REVIEW_WITH_TERRA");
-  assert.equal(first.state.terra_execution_attempts, 1);
-  const second = interpret({ state: first.state, verdict: "FAIL_PLAN" });
-  assert.equal(second.rule.match, rule("PRIMARY_SOL_TERRA_ATTEMPT_2_FAIL").match);
-  assert.equal(second.state.current_stage, "SOL_FULL_TAKEOVER");
-  assert.equal(second.state.terra_execution_enabled, false);
-  assert.equal(second.state.sol_full_takeover, true);
+  assert.equal(first.rule.match, rule("INITIAL_FAIL").match);
+  assert.equal(first.state.current_stage, "SOL_REPLAN_WITH_LUNA");
+  assert.equal(first.state.terra_execution_attempts, 0);
+  const solFail = interpret({ state: first.state, verdict: "FAIL_PLAN" });
+  assert.equal(solFail.rule.match, rule("SOL_REPLAN_FAIL").match);
+  assert.equal(solFail.state.current_stage, "SOL_PLAN_REVIEW_WITH_TERRA");
+  assert.equal(solFail.state.luna_execution_enabled, false);
+  const terra1 = interpret({ state: solFail.state, verdict: "FAIL_IMPLEMENTATION" });
+  assert.equal(terra1.rule.match, rule("TERRA_ATTEMPT_1_FAIL").match);
+  assert.equal(terra1.state.terra_execution_attempts, 1);
+  const terra2 = interpret({ state: terra1.state, verdict: "FAIL_PLAN" });
+  assert.equal(terra2.rule.match, rule("TERRA_ATTEMPT_2_FAIL").match);
+  assert.equal(terra2.state.current_stage, "SOL_FULL_TAKEOVER");
+  assert.equal(terra2.state.terra_execution_enabled, false);
+  assert.equal(terra2.state.sol_full_takeover, true);
 });
 
 test("topology enforces two children, no matching primary, and stage-required spawn", () => {
-  assert.deepEqual(topology("sol", "INITIAL", ["terra"]), { evidenceGap: false, children: ["terra"] });
+  assert.deepEqual(topology("sol", "INITIAL", ["luna", "terra"]), { evidenceGap: false, children: ["luna", "terra"] });
   assert.deepEqual(topology("luna", "INITIAL", ["luna", "terra", "sol"]), { evidenceGap: true, children: [] });
   assert.deepEqual(topology("terra", "SOL_FULL_TAKEOVER", ["luna", "sol"]), { evidenceGap: false, children: [] });
   const blocked = interpret({ state: state(), verdict: "EVIDENCE_GAP", validRoles: ["terra", "sol"] });

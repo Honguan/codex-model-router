@@ -41,11 +41,12 @@ npx codex-model-router@latest install --v2
 
 ```sh
 npx codex-model-router@latest install \
-  --terra-reasoning high \
+  --terra-reasoning medium \
   --luna-reasoning xhigh \
   --sol-reasoning medium \
   --terra-fast
 ```
+未指定 `--terra-reasoning` 時，受管理的 Terra child 預設使用 `medium`。
 
 | 選項 | 用途 |
 | --- | --- |

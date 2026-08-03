@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { LEGACY_TEMPLATES, TEMPLATES, WORKFLOW_PLAN_ARTIFACT_CONTRACT } from "../lib/manifest.js";
 
@@ -57,6 +58,21 @@ test("router uses matching primary inline and task-scoped escalation stages", ()
   assert.match(skill, /terra_execution_attempts/);
   assert.match(skill, /blocked verdicts never attempt execution/);
   assert.match(skill, /ordinary questions, explanations, read-only analysis/);
+});
+
+test("bilingual README workflow prose matches the universal diagrams", () => {
+  const chinese = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  const english = readFileSync(new URL("../README.en.md", import.meta.url), "utf8");
+
+  assert.doesNotMatch(chinese, /primary Sol 的 INITIAL 不建立 Luna，只使用 Terra 子代理/);
+  assert.doesNotMatch(english, /primary Sol INITIAL has no Luna child and uses Terra as the only child executor/);
+  for (const document of [chinese, english]) {
+    assert.match(document, /SOL_REPLAN_WITH_LUNA/);
+    assert.match(document, /SOL_PLAN_REVIEW_WITH_TERRA/);
+    assert.match(document, /SOL_FULL_TAKEOVER/);
+    assert.match(document, /PLAN\.md/);
+    assert.match(document, /cleanup-failed/);
+  }
 });
 
 test("all current templates carry the deterministic scoped plan-artifact contract", () => {

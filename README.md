@@ -148,25 +148,38 @@ flowchart TD
 
 ## 工作流程恢復契約
 
-恢復是由主機提供的宣告式契約消費流程；套件不提供 JavaScript 執行階段 API、CLI 或子代理程序持久化。主機提供有效角色、目前主模型、executor 與拓撲；超過兩個子代理槽位時回報 `EVIDENCE_GAP`，不採取未證實動作。
+恢復是主機消費的宣告式契約；套件不保存子代理程序，也不宣稱提供 runtime persistence。
 
-狀態檔固定為 `RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`。登錄是根層 `{version?, root_session_id, workflow_id, agents:{[role]:{agent_id,status,handoff}}, diagnostics?}`；`agents` 必須是以角色為 key 的物件，不得是陣列，也不得巢狀 `root`/`workflow`。只使用精確 ID；未知或模糊的 ID 不得替換。相同主模型、停用、無效（政策無效）、主模型切換或多餘實例一律 `removed-by-policy`；其餘每個已保存實例恰有一個結果：`reused`、`replaced`、`removed-by-policy`、`resume-failed`、`not-supported`、`stale-workflow` 或 `invalid-agent-id`。
-
-只有主機確認實例遺失、關閉、無效、該實例不支援或恢復失敗，且主機明確建立新實例並獲政策允許時才可替換；handoff 必須原樣保留。主模型所在主線程（不論選定模型）負責登錄載入、原子持久化與 runtime 協調；Terra/Sol 子角色及企劃僅讀取登錄，企劃檔的寫入與清理由目前有寫入權的 executor 負責。寫入使用同目錄暫存檔的 flush、close、rename 原子順序；任一步驟失敗便保留先前登錄、不發布 partial state，也不執行相依動作。這些是模板契約測試，不是 live E2E。
+- 狀態檔：`RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`。
+- 登錄格式：根層 `version?`、`root_session_id`、`workflow_id`、`agents`、`diagnostics?`；`agents` 是以角色為 key 的物件，不是陣列。
+- 主機提供目前 primary、executor 與最多兩個有效 child roles。超過兩個回報 `EVIDENCE_GAP`，不變更狀態或採取 runtime 動作；只處理清單內角色，其他角色為 `removed-by-policy`。
+- 精確且可恢復的 ID 直接 `reused`。只有主機確認實例不可用、政策允許替換且能建立新實例時才 `replaced`，並原樣保留 handoff；未知或模糊 ID 不替換。
+- 主線程負責載入、atomic persistence 與協調；目前可寫入的 executor 負責 PLAN.md。寫入順序是 flush、close、rename；任何一步失敗都保留舊登錄、不發布 partial state、不執行相依動作。
 
 ## 工作流程升級狀態機
 
-每個 task 另以 `WORKFLOW_STATE_PATH=<ARTIFACT_DIR>/workflow-state.v1.json` 持久化 task-scoped 狀態，與 recovery registry 分離。狀態包含 workflow/root ID、需求/證據/企劃版本、目前 stage、最新 verdict、主模型、Sol 審查失敗次數、Terra 執行次數、三個執行旗標、active role IDs、所有角色 ownership 與 `blocked_reason`。同一工作流程切換主模型不重置版本、計數、stage 或停用旗標；新 workflow 才建立初始狀態。
+每個 task 以 `WORKFLOW_STATE_PATH=<ARTIFACT_DIR>/workflow-state.v1.json` 保存自己的狀態，與 recovery registry 分開。狀態包含版本、stage、verdict、primary、計數、執行旗標、角色 ownership 與 `blocked_reason`。同一 task 切換 primary 保留這些值；新 workflow 才重設。
 
-Stage 單調為 `INITIAL` → `SOL_REPLAN_WITH_LUNA` → `SOL_PLAN_REVIEW_WITH_TERRA` → `SOL_FULL_TAKEOVER`。`PASS` 終止；`EVIDENCE_GAP`/`REQUIREMENT_CLARIFICATION` 留在原 stage 且不嘗試執行或增加計數；只有 `FAIL_PLAN`/`FAIL_IMPLEMENTATION` 推進。Luna/Terra 主模型先由 Terra 規劃審查、Luna 執行；primary Sol 的 INITIAL 不建立 Luna，只使用 Terra 子代理。Luna 首次停用後 Terra 最多執行兩次，仍失敗便永久停用 Terra 並由 Sol 接管。
+四個 stage 單調前進：
 
-所有角色 TOML 具 workspace-write 能力，但寫入由 stage 與旗標限制：Sol 在 `SOL_FULL_TAKEOVER` 前唯讀，停用的 primary 永久為 coord-only；最多兩個子代理、不得建立與主模型同模型的 child，且只在 stage 要求時 spawn。主線程負責 atomic flush/close/rename；失敗時保留先前狀態、不發布 partial state、不執行相依動作。這是主機消費的 declarative contract，不提供 runtime API、CLI 或 live E2E。
+1. `INITIAL`：目前 primary 確認需求；Terra 規劃/審查，啟用的 Luna 讀取/執行。
+2. `SOL_REPLAN_WITH_LUNA`：Sol 修訂企劃，Luna 修正，Terra 再審查。
+3. `SOL_PLAN_REVIEW_WITH_TERRA`：停用 Luna；Sol 規劃/審查，Terra 依計畫執行。
+4. `SOL_FULL_TAKEOVER`：停用 Terra 執行；Sol 規劃、讀取、實作、審查並完成。
+
+`PASS` 終止並由目前 primary 回覆；`EVIDENCE_GAP`/`REQUIREMENT_CLARIFICATION` 留在原 stage，不消耗執行次數。Primary Sol/Terra/Luna 分別不建立同模型 child；最多兩個 child，且不得在 Stage 4 重新啟用 executor。
 
 ## 企劃檔生命週期
 
-每個 workflow 的企劃檔固定為選定 scope 的 `<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md`，不會寫入來源目錄，也不會掃描其他 workflow。狀態保存 `plan_path`、artifact／cleanup owner、cleanup required 與 artifact status。Terra 與 takeover 前 Sol 回傳完整內容或 delta；目前有寫入權的 executor 才能原子寫入或更新。`INITIAL` 使用目前 executor、`SOL_REPLAN_WITH_LUNA` 使用 Luna、Luna 停用後的 `SOL_PLAN_REVIEW_WITH_TERRA` 使用 Terra、`SOL_FULL_TAKEOVER` 使用 Sol；沒有可寫入角色時只保留 in-memory artifact，不宣稱已寫檔。
+企劃檔固定在 `<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md`；每個 workflow 只使用自己的目錄。
 
-PASS 在必要證據保存後排程由同一 cleanup owner 移除該 workflow 的精確目錄。取消、阻塞、恢復、替換與主模型切換保留原本的路徑、版本與 owner；新 workflow 使用新目錄。清理失敗會保存並回報 `cleanup-failed`，只有明確要求保留時才標示 `retained`。
+- `INITIAL`：Terra 提供企劃，由目前可寫入的 executor 保存；Luna 為 primary 時由 primary Luna 保存，否則由 Luna child 保存。
+- `SOL_REPLAN_WITH_LUNA`：Sol 提供修訂，啟用的 Luna 保存並負責清理。
+- `SOL_PLAN_REVIEW_WITH_TERRA`：Sol 提供修訂，啟用的 Terra 保存並負責清理。
+- `SOL_FULL_TAKEOVER`：Sol 保存並清理。
+- 沒有可寫入角色時只保留 in-memory artifact，不宣稱已寫檔。
+
+只有目前可寫入的 executor 能原子寫入或更新 PLAN.md；reviewer 不寫檔。`PASS` 後由同一 cleanup owner 移除該 workflow 目錄。阻塞、恢復、替換與 primary switch 保留路徑、版本與 owner；清理失敗保存為 `cleanup-failed`。
 
 ## V2 行為
 

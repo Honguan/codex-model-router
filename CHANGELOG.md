@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.1 - 2026-08-03
+
+- Default managed Terra child reasoning to `medium` when `--terra-reasoning` is omitted.
+- Unify the bilingual multi-agent workflow overview image filename to `multi-agent-workflow-overview.png`.
+
 ## 3.1.0 - 2026-08-03
 
 - Keep the same Luna role identity across the workflow and retain it as an `INTERACTION_ONLY` worker after executor handoff.

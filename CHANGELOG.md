@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.1.0 - 2026-08-03
+
+- Keep the same Luna role identity across the workflow and retain it as an `INTERACTION_ONLY` worker after executor handoff.
+- Add canonical Luna lifecycle modes, bounded interaction actions, structured results, and atomic workflow-state policy fields.
+- Classify verification failures before rollback, preserve correctable work by default, and support evidence-first selective or authorized safety rollback.
+- Centralize recovery, escalation, PLAN, interaction, and rollback contracts while keeping role prompts compact; update bilingual workflow documentation and regression coverage.
+
 ## 3.0.8 - 2026-08-03
 
 - Include the English and Traditional Chinese README flowchart PNGs in the published npm package and replace the obsolete WEBP allowlist.

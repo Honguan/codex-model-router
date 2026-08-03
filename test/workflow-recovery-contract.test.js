@@ -202,6 +202,48 @@ test("policy removal handles primary switch, disabled executor, and extra saved 
   assert.deepEqual(extra.actions, []);
 });
 
+test("resume policy covers each primary with Luna disabled and Terra disabled", () => {
+  const stage3Roles = Object.freeze({
+    sol: ["terra"],
+    terra: ["sol"],
+    luna: ["terra", "sol"]
+  });
+  const saved = registry({
+    terra: { agent_id: "agent-terra", status: "saved", handoff: "terra" },
+    luna: { agent_id: "agent-luna", status: "saved", handoff: "luna" },
+    sol: { agent_id: "agent-sol", status: "saved", handoff: "sol" }
+  });
+  const runtime = {
+    terra: { state: "resumable" },
+    luna: { state: "resumable" },
+    sol: { state: "resumable" }
+  };
+
+  for (const primary of ["sol", "terra", "luna"]) {
+    const resumed = evaluateRecovery({
+      validRoles: stage3Roles[primary],
+      disabledRoles: ["luna"],
+      saved,
+      runtime
+    });
+    assert.equal(resumed.results.luna, "removed-by-policy", `${primary} keeps Luna disabled`);
+    for (const role of stage3Roles[primary]) assert.equal(resumed.results[role], "reused", `${primary} reuses ${role}`);
+  }
+
+  const fullTakeover = evaluateRecovery({
+    validRoles: [],
+    disabledRoles: ["luna", "terra"],
+    saved,
+    runtime
+  });
+  assert.deepEqual(fullTakeover.results, {
+    terra: "removed-by-policy",
+    luna: "removed-by-policy",
+    sol: "removed-by-policy"
+  });
+  assert.deepEqual(fullTakeover.actions, []);
+});
+
 test("invalid policy topology is an evidence gap with no mutation, results, or actions (contract fixture; not live E2E)", () => {
   const gap = evaluateRecovery({
     validRoles: ["terra", "luna", "sol"],

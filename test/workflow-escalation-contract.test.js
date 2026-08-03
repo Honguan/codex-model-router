@@ -97,6 +97,27 @@ function topology(primary, stage, validRoles) {
   return { evidenceGap: false, children: validRoles.filter((role) => role !== primary) };
 }
 
+const primaryModels = ["sol", "terra", "luna"];
+const initialChildren = Object.freeze({
+  sol: ["luna", "terra"],
+  terra: ["luna", "sol"],
+  luna: ["terra", "sol"]
+});
+
+function stageState(primary, stage, overrides = {}) {
+  const stageDefaults = {
+    INITIAL: {},
+    SOL_REPLAN_WITH_LUNA: {},
+    SOL_PLAN_REVIEW_WITH_TERRA: { luna_execution_enabled: false, sol_review_failures: 1 },
+    SOL_FULL_TAKEOVER: { luna_execution_enabled: false, terra_execution_enabled: false, sol_full_takeover: true, sol_review_failures: 3, terra_execution_attempts: 2 }
+  };
+  return state({ primary_model: primary, current_stage: stage, ...stageDefaults[stage], ...overrides });
+}
+
+function finalReplyOwner(workflowState) {
+  return workflowState.primary_model;
+}
+
 test("production structured contract is immutable and generated prose contains its data", () => {
   assert.equal(Object.isFrozen(contract), true);
   assert.deepEqual(contract.roles, ["terra", "luna", "sol"]);
@@ -179,20 +200,89 @@ test("topology enforces two children, no matching primary, and stage-required sp
   assert.deepEqual(blocked.spawned, []);
 });
 
-test("all six same-session switches preserve task state and rebind through recovery projection", () => {
+test("all six same-session switches preserve every stage and rebind through recovery projection", () => {
   assert.equal(contract.switchRules.length, 6);
   const directedPairs = contract.switchRules.map(({ from, to }) => `${from}->${to}`);
   assert.equal(new Set(directedPairs).size, 6);
   for (const switchRule of contract.switchRules) {
     const { from, to } = switchRule;
-    const before = state({ primary_model: from, current_stage: "SOL_PLAN_REVIEW_WITH_TERRA", latest_verdict: "FAIL_PLAN", sol_review_failures: 1, terra_execution_attempts: 1, luna_execution_enabled: false, terra_execution_enabled: true });
-    const switched = interpret({ state: before, event: "primary-switch", primaryModel: to });
-    assert.equal(switched.rule.match, rule("PRIMARY_SWITCH").match);
-    for (const field of contract.requiredStateFields) {
-      if (field === "primary_model") continue;
-      assert.deepEqual(switched.state[field], before[field], `${field} must survive a primary switch`);
+    for (const stage of contract.stages) {
+      const before = stageState(from, stage, { latest_verdict: "FAIL_PLAN", requirement_version: `${stage}-requirement`, evidence_version: `${stage}-evidence`, plan_version: `${stage}-plan` });
+      const switched = interpret({ state: before, event: "primary-switch", primaryModel: to });
+      assert.equal(switched.rule.match, rule("PRIMARY_SWITCH").match);
+      for (const field of contract.requiredStateFields) {
+        if (field === "primary_model") continue;
+        assert.deepEqual(switched.state[field], before[field], `${from}->${to} ${stage} must preserve ${field}`);
+      }
+      assert.equal(switched.state.primary_model, to);
     }
-    assert.equal(switched.state.primary_model, to);
+  }
+});
+
+test("every primary follows the universal topology and disabled-executor policy", () => {
+  for (const primary of primaryModels) {
+    for (const stage of ["INITIAL", "SOL_REPLAN_WITH_LUNA"]) {
+      assert.deepEqual(topology(primary, stage, initialChildren[primary]), { evidenceGap: false, children: initialChildren[primary] });
+    }
+
+    const stage3Roles = primary === "sol" ? ["terra"] : primary === "terra" ? ["sol"] : ["terra", "sol"];
+    const stage3 = topology(primary, "SOL_PLAN_REVIEW_WITH_TERRA", stage3Roles);
+    assert.deepEqual(stage3, { evidenceGap: false, children: stage3Roles }, `${primary} keeps only enabled Stage 3 roles`);
+    assert.deepEqual(topology(primary, "SOL_FULL_TAKEOVER", stage3Roles), { evidenceGap: false, children: [] });
+    assert.equal(stage3.children.includes(primary), false, `${primary} must not have a matching child`);
+  }
+});
+
+test("every primary follows each PASS branch and returns through the current primary", () => {
+  for (const primary of primaryModels) {
+    for (const stage of contract.stages) {
+      const passed = interpret({ state: stageState(primary, stage), verdict: "PASS" });
+      assert.equal(passed.state.current_stage, "TERMINAL", `${primary}/${stage} PASS terminates`);
+      assert.equal(finalReplyOwner(passed.state), primary, `${primary}/${stage} PASS returns through the primary`);
+      assert.equal(passed.attempted, false);
+    }
+  }
+});
+
+test("every primary follows the complete failure escalation chain", () => {
+  for (const primary of primaryModels) {
+    const initial = interpret({ state: stageState(primary, "INITIAL"), verdict: "FAIL_IMPLEMENTATION" });
+    assert.equal(initial.rule.match, rule("INITIAL_FAIL").match);
+    assert.equal(initial.state.current_stage, "SOL_REPLAN_WITH_LUNA");
+
+    const replan = interpret({ state: initial.state, verdict: "FAIL_PLAN" });
+    assert.equal(replan.rule.match, rule("SOL_REPLAN_FAIL").match);
+    assert.equal(replan.state.current_stage, "SOL_PLAN_REVIEW_WITH_TERRA");
+    assert.equal(replan.state.luna_execution_enabled, false);
+
+    const terraAttempt1 = interpret({ state: replan.state, verdict: "FAIL_IMPLEMENTATION" });
+    assert.equal(terraAttempt1.rule.match, rule("TERRA_ATTEMPT_1_FAIL").match);
+    assert.equal(terraAttempt1.state.current_stage, "SOL_PLAN_REVIEW_WITH_TERRA");
+    assert.equal(terraAttempt1.state.terra_execution_attempts, 1);
+
+    const terraAttempt2 = interpret({ state: terraAttempt1.state, verdict: "FAIL_PLAN" });
+    assert.equal(terraAttempt2.rule.match, rule("TERRA_ATTEMPT_2_FAIL").match);
+    assert.equal(terraAttempt2.state.current_stage, "SOL_FULL_TAKEOVER");
+    assert.equal(terraAttempt2.state.terra_execution_enabled, false);
+    assert.equal(terraAttempt2.state.sol_full_takeover, true);
+    assert.equal(finalReplyOwner(terraAttempt2.state), primary);
+  }
+});
+
+test("blocking verdicts preserve every primary stage without consuming an attempt", () => {
+  for (const primary of primaryModels) {
+    for (const stage of contract.stages) {
+      const before = stageState(primary, stage, { terra_execution_attempts: 1, sol_review_failures: 2, blocked_reason: null });
+      for (const verdict of blockedVerdicts) {
+        const blocked = interpret({ state: before, verdict, blockedReason: "missing evidence" });
+        assert.equal(blocked.rule.match, rule("BLOCK").match);
+        assert.equal(blocked.state.current_stage, stage);
+        assert.equal(blocked.state.terra_execution_attempts, before.terra_execution_attempts);
+        assert.equal(blocked.state.sol_review_failures, before.sol_review_failures);
+        assert.equal(blocked.attempted, false);
+        assert.deepEqual(blocked.spawned, []);
+      }
+    }
   }
 });
 

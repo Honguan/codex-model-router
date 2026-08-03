@@ -19,6 +19,15 @@ function activeSandboxAssignments(content) {
     .map((line) => line.match(/^sandbox_mode\s*=\s*"([^"]+)"\s*$/)[1]);
 }
 
+async function assertPackagedReadmeImages(packageRoot) {
+  for (const readme of ["README.md", "README.en.md"]) {
+    const content = await readFile(join(packageRoot, readme), "utf8");
+    const imageReferences = [...content.matchAll(/!\[[^\]]*\]\((docs\/images\/[^)\s]+)\)/g)].map((match) => match[1]);
+    assert.ok(imageReferences.length > 0, `${readme} must reference at least one packaged diagram`);
+    for (const image of imageReferences) await access(join(packageRoot, ...image.split("/")));
+  }
+}
+
 try {
   const packageJson = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
   const packed = await runNpm(["pack", "--json", "--ignore-scripts", "--pack-destination", temporary], { cwd: root });
@@ -34,7 +43,9 @@ try {
   await runNpm(["init", "-y"], { cwd: project });
   await runNpm(["install", "--no-audit", "--no-fund", "--ignore-scripts", tarball], { cwd: project });
 
-  const binary = join(project, "node_modules", "codex-model-router", "bin", "codex-model-router.js");
+  const packageRoot = join(project, "node_modules", "codex-model-router");
+  await assertPackagedReadmeImages(packageRoot);
+  const binary = join(packageRoot, "bin", "codex-model-router.js");
   const version = await exec(process.execPath, [binary, "--version"], { cwd: project });
   assert.equal(version.stdout.trim(), packageJson.version);
 

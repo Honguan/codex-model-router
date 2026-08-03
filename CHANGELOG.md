@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.0.8 - 2026-08-03
+
+- Include the English and Traditional Chinese README flowchart PNGs in the published npm package and replace the obsolete WEBP allowlist.
+
 ## 3.0.7 - 2026-08-03
 
 - Define deterministic plan-artifact ownership, persistence, cleanup, and failure reporting for each workflow stage.

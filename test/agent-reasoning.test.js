@@ -38,7 +38,7 @@ test("install uses the default role profile and keeps V2 disabled unless request
   try {
     const options = { cwd: dir.project, home: dir.home, output: quiet };
     assert.equal(await runCli(["install"], options), 0);
-    assert.equal(await agentReasoning(dir.project, "terra"), "high");
+    assert.equal(await agentReasoning(dir.project, "terra"), "medium");
     assert.equal(await agentReasoning(dir.project, "luna"), "xhigh");
     assert.equal(await agentReasoning(dir.project, "sol"), "medium");
     assert.equal(await exists(join(dir.project, ".codex", "model-router-v2-state.json")), false);

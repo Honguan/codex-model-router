@@ -35,7 +35,7 @@ test("Fast is false by default and applies independently by role", async () => {
     assert.equal(await agentFast(dir.project, "terra"), true);
     assert.equal(await agentFast(dir.project, "luna"), false);
     assert.equal(await agentFast(dir.project, "sol"), false);
-    assert.match(await agentContent(dir.project, "terra"), /model_reasoning_effort = "high"/);
+    assert.match(await agentContent(dir.project, "terra"), /model_reasoning_effort = "medium"/);
   } finally {
     await dir.cleanup();
   }

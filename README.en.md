@@ -41,11 +41,12 @@ Skills are installed under `.codex/skills/<skill-name>`; reinstalling safely mig
 
 ```sh
 npx codex-model-router@latest install \
-  --terra-reasoning high \
+  --terra-reasoning medium \
   --luna-reasoning xhigh \
   --sol-reasoning medium \
   --terra-fast
 ```
+When `--terra-reasoning` is omitted, managed Terra children default to `medium`.
 
 | Option | Purpose |
 | --- | --- |

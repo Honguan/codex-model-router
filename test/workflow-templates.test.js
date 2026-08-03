@@ -73,24 +73,18 @@ test("router uses matching primary inline and task-scoped escalation stages", ()
   assert.match(skill, /BLOCK_AND_ESCALATE/);
 });
 
-test("bilingual README workflow prose matches the universal diagrams", () => {
+test("bilingual README workflow overview uses the dedicated diagrams", () => {
   const chinese = readFileSync(new URL("../README.md", import.meta.url), "utf8");
   const english = readFileSync(new URL("../README.en.md", import.meta.url), "utf8");
 
   assert.doesNotMatch(chinese, /primary Sol 的 INITIAL 不建立 Luna，只使用 Terra 子代理/);
   assert.doesNotMatch(english, /primary Sol INITIAL has no Luna child and uses Terra as the only child executor/);
-  for (const document of [chinese, english]) {
-    assert.match(document, /SOL_REPLAN_WITH_LUNA/);
-    assert.match(document, /SOL_PLAN_REVIEW_WITH_TERRA/);
-    assert.match(document, /SOL_FULL_TAKEOVER/);
-    assert.match(document, /PLAN\.md/);
-    assert.match(document, /cleanup-failed/);
-    assert.match(document, /INTERACTION_ONLY/);
-    assert.match(document, /luna_role_id/);
-    assert.match(document, /CORRECTABLE/);
-    assert.match(document, /BLOCK_AND_ESCALATE/);
-    assert.match(document, /STALE_TARGET/);
-  }
+  assert.match(chinese, /## 多代理工作流程總覽/);
+  assert.match(chinese, /docs\/images\/zh-TW\/multi-agent-workflow-overview-zh-TW\.png/);
+  assert.doesNotMatch(chinese, /## 工作流程契約|SOL_REPLAN_WITH_LUNA|SOL_PLAN_REVIEW_WITH_TERRA|SOL_FULL_TAKEOVER/);
+  assert.match(english, /## Multi-Agent Workflow Overview/);
+  assert.match(english, /docs\/images\/en\/multi-agent-workflow-overview-en\.png/);
+  assert.doesNotMatch(english, /## Workflow contract|SOL_REPLAN_WITH_LUNA|SOL_PLAN_REVIEW_WITH_TERRA|SOL_FULL_TAKEOVER/);
 });
 
 test("the full plan contract is centralized and role prompts stay compact", () => {

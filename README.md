@@ -147,57 +147,9 @@ flowchart TD
 - Luna 在同一 root session/workflow 保留同一個 `luna_role_id`；降級後以 `INTERACTION_ONLY` 執行受 stage 授權的 canonical action IDs。
 - 最終回覆一律回到主模型。
 
-## 工作流程契約
+## 多代理工作流程總覽
 
-這是由主機消費的宣告式契約；套件不保存子代理程序，也不提供 runtime persistence。
-
-### 恢復
-
-- `RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`；registry 的 `agents` 是角色 keyed object。
-- Host 提供 primary、executor 與最多兩個 child roles；超過兩個回報 `EVIDENCE_GAP`，不變更狀態。
-- 同一 workflow 的精確可恢復 Luna ID 即使降為 `INTERACTION_ONLY` 仍直接 `reused`；只有 host 確認不可用且允許建立新實例時才替換，handoff 原樣保留。新 workflow、root session 或 workspace 不沿用舊身份。
-- Primary thread 負責載入、保存與協調；active writable executor 負責 PLAN.md。寫入失敗時保留舊狀態，不發布 partial state。
-
-### 升級流程
-
-每個 task 以 `WORKFLOW_STATE_PATH=<ARTIFACT_DIR>/workflow-state.v1.json` 保存 stage、verdict、計數、flags 與 ownership；同一 task 切換 primary 不重設狀態。
-
-| Stage | 流程 | PLAN.md owner |
-| --- | --- | --- |
-| `INITIAL` | Primary 確認 → Luna 讀取/執行 → Terra 規劃/審查 | Current writable executor |
-| `SOL_REPLAN_WITH_LUNA` | Sol 修訂 → Luna 修正 → Terra 審查 | Luna |
-| `SOL_PLAN_REVIEW_WITH_TERRA` | Luna 保留為 `INTERACTION_ONLY`；Sol 規劃/審查 → Terra 執行 | Terra |
-| `SOL_FULL_TAKEOVER` | Luna 保留為 `INTERACTION_ONLY`；停用 Terra 寫入；Sol 完成工作 | Sol |
-
-`PASS` 終止並由目前 primary 回覆；`EVIDENCE_GAP`/`REQUIREMENT_CLARIFICATION` 留在原 stage，不消耗執行次數。不得建立同模型 child，最多兩個 child；Stage 4 不重新啟用 source executor，但可保留 Luna interaction child。
-
-### Luna interaction mode
-
-| Mode | 權限 |
-| --- | --- |
-| `ACTIVE_EXECUTOR` | 依 stage 寫入 source／PLAN 並執行授權工作 |
-| `INTERACTION_ONLY` | 不寫 source／PLAN、不決策或自我核准，只執行 host 提供的 action IDs |
-| `DETACHED` | 不執行任何動作 |
-
-Interaction 結果需包含 action、command、cwd、exit code、摘要、evidence、artifact refs 與 redactions；大型輸出放在 artifact，敏感資料先遮罩。
-
-### Verification failure rollback
-
-`FAIL_PLAN` 或 `FAIL_IMPLEMENTATION` 先保留有效 diff 與證據、分類失敗，再決定是否回滾；可修正問題預設採增量修正，不自動刪除未知未追蹤檔案。
-
-| 分類 | 預設政策 |
-| --- | --- |
-| `CORRECTABLE` | `NONE`：沿用既有 escalation，保留工作成果 |
-| `SCOPE_VIOLATION`、`WORKSPACE_POLLUTION` | `SELECTIVE`：只處理已識別且驗證過的目標 |
-| `WORKSPACE_CORRUPTION`、`DEPENDENCY_CORRUPTION`、`UNKNOWN_STATE` | `BLOCK_AND_ESCALATE`：停止推進並保留證據 |
-| `EXTERNAL_SIDE_EFFECT` | `EXTERNAL_SYSTEM`：先完成補償動作 |
-| `SECURITY_RISK` | `ISOLATE_AND_ROLLBACK`：隔離、遮罩並由授權者處理 |
-
-回滾前必須先寫入 evidence 與 pre-state；目標雜湊改變時標記 `STALE_TARGET`，部分或失敗回滾不得視為 `PASS`。
-
-### PLAN.md 生命週期
-
-每個 workflow 只使用 `<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md`。只有 active writable executor 能原子寫入；reviewer 不寫檔。`PASS` 後由同一 owner 清理該目錄；阻塞、恢復、替換與 primary switch 保留 path、version、owner；清理失敗標記為 `cleanup-failed`。
+![多代理工作流程總覽](docs/images/zh-TW/multi-agent-workflow-overview-zh-TW.png)
 
 ## V2 行為
 

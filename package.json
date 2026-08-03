@@ -1,6 +1,6 @@
 {
   "name": "codex-model-router",
-  "version": "3.0.7",
+  "version": "3.0.8",
   "description": "Install a safe evidence-first Codex workflow for Terra, Luna, and Sol.",
   "type": "module",
   "bin": {
@@ -23,12 +23,9 @@
     "lib/router.js",
     "lib/router-core.js",
     "lib/toml.js",
-    "docs/images/workflow-overview.webp",
-    "docs/images/roles.webp",
-    "docs/images/primary-sol.webp",
-    "docs/images/primary-terra.webp",
-    "docs/images/primary-luna.webp",
+    "docs/images",
     "README.md",
+    "README.en.md",
     "SECURITY.md",
     "MAINTAINERS.md",
     "LICENSE"

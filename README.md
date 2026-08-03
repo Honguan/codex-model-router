@@ -149,7 +149,7 @@ flowchart TD
 
 ## 多代理工作流程總覽
 
-![多代理工作流程總覽](docs/images/zh-TW/multi-agent-workflow-overview-zh-TW.png)
+![多代理工作流程總覽](docs/images/zh-TW/multi-agent-workflow-overview.png)
 
 ## V2 行為
 

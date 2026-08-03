@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { LEGACY_TEMPLATES, TEMPLATES, WORKFLOW_LUNA_INTERACTION_CONTRACT, WORKFLOW_PLAN_ARTIFACT_CONTRACT } from "../lib/manifest.js";
+import {
+  LEGACY_TEMPLATES,
+  TEMPLATES,
+  WORKFLOW_LUNA_INTERACTION_CONTRACT,
+  WORKFLOW_PLAN_ARTIFACT_CONTRACT,
+  WORKFLOW_ROLLBACK_CONTRACT
+} from "../lib/manifest.js";
 
 function activeSandboxAssignments(content) {
   return content.split(/\r?\n/)
@@ -62,6 +68,9 @@ test("router uses matching primary inline and task-scoped escalation stages", ()
   assert.match(skill, /terra_execution_attempts/);
   assert.match(skill, /blocked verdicts never attempt execution/);
   assert.match(skill, /ordinary questions, explanations, read-only analysis/);
+  assert.match(skill, /Verification-failure rollback contract/);
+  assert.match(skill, /CORRECTABLE/);
+  assert.match(skill, /BLOCK_AND_ESCALATE/);
 });
 
 test("bilingual README workflow prose matches the universal diagrams", () => {
@@ -78,6 +87,9 @@ test("bilingual README workflow prose matches the universal diagrams", () => {
     assert.match(document, /cleanup-failed/);
     assert.match(document, /INTERACTION_ONLY/);
     assert.match(document, /luna_role_id/);
+    assert.match(document, /CORRECTABLE/);
+    assert.match(document, /BLOCK_AND_ESCALATE/);
+    assert.match(document, /STALE_TARGET/);
   }
 });
 
@@ -101,6 +113,16 @@ test("the full plan contract is centralized and role prompts stay compact", () =
     }
   }
   assert.equal(WORKFLOW_PLAN_ARTIFACT_CONTRACT.path, "<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md");
+  assert.deepEqual(WORKFLOW_ROLLBACK_CONTRACT.failureClasses, [
+    "CORRECTABLE",
+    "SCOPE_VIOLATION",
+    "WORKSPACE_POLLUTION",
+    "WORKSPACE_CORRUPTION",
+    "DEPENDENCY_CORRUPTION",
+    "EXTERNAL_SIDE_EFFECT",
+    "SECURITY_RISK",
+    "UNKNOWN_STATE"
+  ]);
 });
 
 test("Luna action policy is canonical, disjoint, and has a bounded prompt surface", () => {

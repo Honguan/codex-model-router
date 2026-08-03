@@ -180,6 +180,20 @@ Each task stores stage, verdict, counters, flags, and ownership at `WORKFLOW_STA
 
 Interaction results include action, command, cwd, exit code, summary, evidence, artifact refs, and redactions; large output belongs in artifacts and secrets are redacted first.
 
+### Verification failure rollback
+
+For `FAIL_PLAN` or `FAIL_IMPLEMENTATION`, preserve valid diffs and evidence, classify the failure, then decide whether rollback is needed; correctable failures default to incremental correction, and unknown untracked files are never deleted automatically.
+
+| Class | Default policy |
+| --- | --- |
+| `CORRECTABLE` | `NONE`: use existing escalation and preserve valid work |
+| `SCOPE_VIOLATION`, `WORKSPACE_POLLUTION` | `SELECTIVE`: touch only identified, verified targets |
+| `WORKSPACE_CORRUPTION`, `DEPENDENCY_CORRUPTION`, `UNKNOWN_STATE` | `BLOCK_AND_ESCALATE`: stop advancement and preserve evidence |
+| `EXTERNAL_SIDE_EFFECT` | `EXTERNAL_SYSTEM`: complete compensating action first |
+| `SECURITY_RISK` | `ISOLATE_AND_ROLLBACK`: isolate, redact, and use an authorized handler |
+
+Evidence and pre-state must be persisted before rollback; a changed target hash becomes `STALE_TARGET`, and partial or failed rollback can never be treated as `PASS`.
+
 ### PLAN.md lifecycle
 
 Each workflow uses only `<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md`. Only the active writable executor writes atomically; reviewers do not write it. After `PASS`, the same owner removes the directory. Blocking, resume, replacement, and primary switches preserve path, version, and owner; cleanup failure is stored as `cleanup-failed`.

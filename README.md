@@ -180,6 +180,20 @@ flowchart TD
 
 Interaction 結果需包含 action、command、cwd、exit code、摘要、evidence、artifact refs 與 redactions；大型輸出放在 artifact，敏感資料先遮罩。
 
+### Verification failure rollback
+
+`FAIL_PLAN` 或 `FAIL_IMPLEMENTATION` 先保留有效 diff 與證據、分類失敗，再決定是否回滾；可修正問題預設採增量修正，不自動刪除未知未追蹤檔案。
+
+| 分類 | 預設政策 |
+| --- | --- |
+| `CORRECTABLE` | `NONE`：沿用既有 escalation，保留工作成果 |
+| `SCOPE_VIOLATION`、`WORKSPACE_POLLUTION` | `SELECTIVE`：只處理已識別且驗證過的目標 |
+| `WORKSPACE_CORRUPTION`、`DEPENDENCY_CORRUPTION`、`UNKNOWN_STATE` | `BLOCK_AND_ESCALATE`：停止推進並保留證據 |
+| `EXTERNAL_SIDE_EFFECT` | `EXTERNAL_SYSTEM`：先完成補償動作 |
+| `SECURITY_RISK` | `ISOLATE_AND_ROLLBACK`：隔離、遮罩並由授權者處理 |
+
+回滾前必須先寫入 evidence 與 pre-state；目標雜湊改變時標記 `STALE_TARGET`，部分或失敗回滾不得視為 `PASS`。
+
 ### PLAN.md 生命週期
 
 每個 workflow 只使用 `<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md`。只有 active writable executor 能原子寫入；reviewer 不寫檔。`PASS` 後由同一 owner 清理該目錄；阻塞、恢復、替換與 primary switch 保留 path、version、owner；清理失敗標記為 `cleanup-failed`。

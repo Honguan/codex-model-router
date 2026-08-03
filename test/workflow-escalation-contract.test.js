@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TEMPLATES, WORKFLOW_ESCALATION_CONTRACT, WORKFLOW_RECOVERY_CONTRACT } from "../lib/manifest.js";
+import { TEMPLATES, WORKFLOW_ESCALATION_CONTRACT, WORKFLOW_RECOVERY_CONTRACT, WORKFLOW_ROLLBACK_CONTRACT } from "../lib/manifest.js";
 
 const contract = WORKFLOW_ESCALATION_CONTRACT;
 const failureVerdicts = new Set(contract.verdicts.filter((verdict) => ["FAIL_PLAN", "FAIL_IMPLEMENTATION"].includes(verdict)));
@@ -33,6 +33,15 @@ function state(overrides = {}) {
     active_role_ids: { terra: null, luna: null, sol: null },
     role_ownership: { terra: "child", luna: "primary", sol: "child" },
     blocked_reason: null,
+    rollback_class: null,
+    rollback_policy: null,
+    rollback_status: "NOT_REQUIRED",
+    rollback_target_hash: null,
+    rollback_checkpoint_id: null,
+    rollback_authority: null,
+    rollback_evidence_refs: [],
+    rollback_result: null,
+    rollback_attempts: 0,
     ...overrides
   };
 }
@@ -71,7 +80,16 @@ function applyCounterDirectives(next, directives) {
       luna_allowed_actions: [],
       luna_stage_authorized_actions: [],
       luna_user_approval_actions: [],
-      luna_forbidden_actions: []
+      luna_forbidden_actions: [],
+      rollback_class: null,
+      rollback_policy: null,
+      rollback_status: "NOT_REQUIRED",
+      rollback_target_hash: null,
+      rollback_checkpoint_id: null,
+      rollback_authority: null,
+      rollback_evidence_refs: [],
+      rollback_result: null,
+      rollback_attempts: 0
     });
     if (directive === "disable-luna") next.luna_execution_enabled = false;
     else if (directive === "disable-terra") next.terra_execution_enabled = false;
@@ -142,6 +160,7 @@ test("production structured contract is immutable and generated prose contains i
   assert.deepEqual(contract.roles, ["terra", "luna", "sol"]);
   assert.deepEqual(contract.stages, ["INITIAL", "SOL_REPLAN_WITH_LUNA", "SOL_PLAN_REVIEW_WITH_TERRA", "SOL_FULL_TAKEOVER"]);
   assert.deepEqual(contract.atomicSteps, ["flush", "close", "rename"]);
+  assert.deepEqual(contract.rollbackStateFields, WORKFLOW_ROLLBACK_CONTRACT.stateFields);
   assert.deepEqual(Object.keys(state()).sort(), [...contract.requiredStateFields].sort());
   const production = TEMPLATES.skill.content;
   for (const ruleItem of contract.transitionRules) assert.match(production, new RegExp(ruleItem.description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

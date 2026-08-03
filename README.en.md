@@ -148,25 +148,38 @@ flowchart TD
 
 ## Workflow recovery contract
 
-Recovery is a declarative host-consumed contract; this package provides no JavaScript runtime API, CLI, or child-process persistence. The host supplies valid roles, the current primary, the executor, and topology. More than two child slots must produce `EVIDENCE_GAP` with no unproven action.
+Recovery is a declarative host contract; the package does not persist child processes or claim runtime persistence.
 
-The state file is fixed at `RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`. The registry is root-level `{version?, root_session_id, workflow_id, agents:{[role]:{agent_id,status,handoff}}, diagnostics?}`; `agents` is an object keyed by role, never an array, and nested `root`/`workflow` objects are forbidden. Use exact IDs only; unknown or ambiguous IDs are never replaced. Same-primary, disabled, invalid (policy-invalid), primary-switch, and excess instances are `removed-by-policy`; every saved instance has exactly one result: `reused`, `replaced`, `removed-by-policy`, `resume-failed`, `not-supported`, `stale-workflow`, or `invalid-agent-id`.
-
-Replacement requires a host-confirmed missing, closed, invalid, per-instance unsupported, or resume-failed condition, explicit host creation, and policy permission; the handoff is copied unchanged. The primary thread, regardless of selected model, owns registry loading, atomic persistence, and runtime coordination; Terra/Sol child roles and planning are registry read-only, while the active writable executor owns plan-artifact persistence and cleanup. Write through an atomic sibling-file flush, close, and rename sequence; any failure retains the prior registry, publishes no partial state, and prevents dependent actions. These are template contract fixtures, not live E2E.
+- State path: `RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`.
+- Registry: root-level `version?`, `root_session_id`, `workflow_id`, `agents`, and `diagnostics?`; `agents` is an object keyed by role, never an array.
+- The host supplies the current primary, executor, and at most two valid child roles. More than two returns `EVIDENCE_GAP` with no mutation or runtime action; only supplied roles are inspected and other roles are `removed-by-policy`.
+- Reuse an exact resumable ID. Replace only when the host confirms it is unusable, policy allows replacement, and the host can create the replacement; preserve the handoff. Unknown or ambiguous IDs are not replaced.
+- The primary thread owns loading, atomic persistence, and coordination; the active writable executor owns PLAN.md. Write with flush, close, and rename; any failure retains the prior registry, publishes no partial state, and performs no dependent action.
 
 ## Workflow escalation state machine
 
-Each task also persists task-scoped state at `WORKFLOW_STATE_PATH=<ARTIFACT_DIR>/workflow-state.v1.json`, separate from the recovery registry. State includes workflow/root IDs, requirement/evidence/plan versions, current stage, latest verdict, primary model, Sol review failures, Terra execution attempts, all three execution flags, active role IDs, ownership for every role, and `blocked_reason`. A same-workflow primary switch preserves versions, counters, stage, verdict, and disabled flags; a new workflow creates fresh initial state.
+Each task stores its state at `WORKFLOW_STATE_PATH=<ARTIFACT_DIR>/workflow-state.v1.json`, separate from the recovery registry. It records versions, stage, verdict, primary, counters, execution flags, role ownership, and `blocked_reason`. A same-task primary switch preserves these values; a new workflow resets them.
 
-Stages are monotonic: `INITIAL` → `SOL_REPLAN_WITH_LUNA` → `SOL_PLAN_REVIEW_WITH_TERRA` → `SOL_FULL_TAKEOVER`. `PASS` terminates; `EVIDENCE_GAP` and `REQUIREMENT_CLARIFICATION` remain in the same stage without an attempt or counter increment; only `FAIL_PLAN` and `FAIL_IMPLEMENTATION` advance. Luna/Terra primaries begin with Terra planning/review and Luna execution; primary Sol INITIAL has no Luna child and uses Terra as the only child executor. After Luna is permanently disabled, Terra may execute at most twice; a further failure permanently disables Terra and gives Sol full takeover.
+The four stages are monotonic:
 
-All role TOML files have workspace-write capability, but stage and flags gate writes: Sol is read-only before `SOL_FULL_TAKEOVER`, and a disabled primary remains coord-only permanently. There are at most two children, no child matching the primary model, and spawning occurs only when required by the stage. The primary thread performs atomic flush/close/rename; failure retains prior state, publishes no partial state, and performs no dependent action. This is a declarative host contract, not a runtime API, CLI, or live E2E implementation.
+1. `INITIAL`: the current primary confirms the requirement; Terra plans/reviews and enabled Luna reads/executes.
+2. `SOL_REPLAN_WITH_LUNA`: Sol revises the plan, Luna applies the correction, and Terra reviews again.
+3. `SOL_PLAN_REVIEW_WITH_TERRA`: Luna execution is disabled; Sol plans/reviews and Terra executes the plan.
+4. `SOL_FULL_TAKEOVER`: Terra execution is disabled; Sol reads, plans, implements, reviews, and completes the task.
+
+`PASS` terminates through the current primary; `EVIDENCE_GAP` and `REQUIREMENT_CLARIFICATION` stay in the same stage without consuming an attempt. Primary Sol, Terra, and Luna never create a matching-model child; at most two children are active, and no executor is re-enabled in Stage 4.
 
 ## Plan-artifact lifecycle
 
-Each workflow uses the selected scope's `<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md`; it never writes to source files or scans another workflow. State records `plan_path`, artifact/cleanup owner, cleanup required, and artifact status. Terra and pre-takeover Sol return complete content or a delta, while only the active writable executor atomically persists or updates it. `INITIAL` uses the active executor, `SOL_REPLAN_WITH_LUNA` uses Luna, the post-Luna `SOL_PLAN_REVIEW_WITH_TERRA` stage uses Terra, and `SOL_FULL_TAKEOVER` uses Sol. Without a writable role, the result is an in-memory artifact, never a false file-write claim.
+Each workflow uses `<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md` and never another workflow's directory.
 
-After PASS and required evidence preservation, the same cleanup owner removes only that exact workflow directory. Cancellation, blocking, resume, replacement, and primary switches preserve its path, version, and ownership; a new workflow gets a new directory. A failed cleanup is persisted and reported as `cleanup-failed`; `retained` is used only when retention is explicit.
+- `INITIAL`: Terra supplies the plan; the current writable executor stores it. Luna stores it when Luna is the primary, otherwise the Luna child does.
+- `SOL_REPLAN_WITH_LUNA`: Sol supplies the revision; enabled Luna stores and cleans it.
+- `SOL_PLAN_REVIEW_WITH_TERRA`: Sol supplies the revision; enabled Terra stores and cleans it.
+- `SOL_FULL_TAKEOVER`: Sol stores and cleans it.
+- With no writable role, keep an in-memory artifact and make no file-write claim.
+
+Only the active writable executor atomically writes or updates PLAN.md; reviewers do not write it. After `PASS`, the same cleanup owner removes that workflow directory. Blocking, resume, replacement, and primary switches preserve its path, version, and owner; cleanup failure is stored as `cleanup-failed`.
 
 ## V2
 

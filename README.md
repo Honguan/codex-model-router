@@ -35,7 +35,7 @@ npx codex-model-router@latest install --v2
 | 專案 | `<專案>/.codex/agents` | `<專案>/.codex/skills` |
 | 目前使用者 | `~/.codex/agents` | `~/.codex/skills` |
 
-技能一律安裝到對應 Codex 根目錄下的 `.codex/skills/<技能名稱>`；`.codex/skills/.system` 仍保留給 Codex 內建技能。從舊版重新安裝時，套件會將受管理的 `.agents/skills` 技能安全遷移到新位置。安裝完成後，CLI 會直接顯示實際代理與技能路徑。
+技能安裝到對應 Codex 根目錄的 `.codex/skills/<技能名稱>`；重裝時會安全遷移受管理的舊版技能，CLI 會顯示實際路徑。
 
 ## 設定
 
@@ -63,7 +63,7 @@ npx codex-model-router@latest install \
 
 可用思考等級：`none`、`low`、`medium`、`high`、`xhigh`、`max`。
 
-Fast 與思考等級是獨立設定，且僅保存到同一個子代理角色；不會影響主代理或其他角色。可用 `npx codex-model-router@latest status [--global]` 查看 `configured` 與 `effective`。目前 Codex 沒有每子代理 Fast 的執行階段控制，因此 `configured=true` 會明確顯示 `effective=not-supported`；安裝器不會啟用全域 `fast_mode`，也不會把 Fast 改寫成思考等級。
+Fast 與思考等級分開，且只保存到同一個 child role，不影響 primary 或其他角色。用 `status [--global]` 查看設定；目前 Codex 不支援每個 child 的 Fast runtime control，因此 `configured=true` 會顯示 `effective=not-supported`。
 
 ## 圖解說明
 
@@ -141,45 +141,37 @@ flowchart TD
 
 - 同一個工作流程不重複啟動相同模型代理。
 - 主模型與代理角色相同時，由主線程直接完成該角色工作。
-- Luna、Terra、Sol 都具備寫入能力，但只能由升級狀態與執行旗標授權寫入；Terra 與 takeover 前 Sol 的企劃／審查只回傳內容，不寫入企劃檔。
-- Terra 負責企劃與獨立驗證。
-- Sol 僅在驗證結果不是 PASS 時介入。
+- 寫入權由 stage 與 execution flags 控制；takeover 前的規劃/審查角色只回傳內容。
+- Terra 規劃並獨立驗證；Sol 在非 `PASS` 後介入。
 - 最終回覆一律回到主模型。
 
-## 工作流程恢復契約
+## 工作流程契約
 
-恢復是主機消費的宣告式契約；套件不保存子代理程序，也不宣稱提供 runtime persistence。
+這是由主機消費的宣告式契約；套件不保存子代理程序，也不提供 runtime persistence。
 
-- 狀態檔：`RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`。
-- 登錄格式：根層 `version?`、`root_session_id`、`workflow_id`、`agents`、`diagnostics?`；`agents` 是以角色為 key 的物件，不是陣列。
-- 主機提供目前 primary、executor 與最多兩個有效 child roles。超過兩個回報 `EVIDENCE_GAP`，不變更狀態或採取 runtime 動作；只處理清單內角色，其他角色為 `removed-by-policy`。
-- 精確且可恢復的 ID 直接 `reused`。只有主機確認實例不可用、政策允許替換且能建立新實例時才 `replaced`，並原樣保留 handoff；未知或模糊 ID 不替換。
-- 主線程負責載入、atomic persistence 與協調；目前可寫入的 executor 負責 PLAN.md。寫入順序是 flush、close、rename；任何一步失敗都保留舊登錄、不發布 partial state、不執行相依動作。
+### 恢復
 
-## 工作流程升級狀態機
+- `RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`；registry 的 `agents` 是角色 keyed object。
+- Host 提供 primary、executor 與最多兩個 child roles；超過兩個回報 `EVIDENCE_GAP`，不變更狀態。
+- 精確可恢復的 ID 直接 `reused`；只有 host 確認不可用且允許建立新實例時才替換，handoff 原樣保留。
+- Primary thread 負責載入、保存與協調；active writable executor 負責 PLAN.md。寫入失敗時保留舊狀態，不發布 partial state。
 
-每個 task 以 `WORKFLOW_STATE_PATH=<ARTIFACT_DIR>/workflow-state.v1.json` 保存自己的狀態，與 recovery registry 分開。狀態包含版本、stage、verdict、primary、計數、執行旗標、角色 ownership 與 `blocked_reason`。同一 task 切換 primary 保留這些值；新 workflow 才重設。
+### 升級流程
 
-四個 stage 單調前進：
+每個 task 以 `WORKFLOW_STATE_PATH=<ARTIFACT_DIR>/workflow-state.v1.json` 保存 stage、verdict、計數、flags 與 ownership；同一 task 切換 primary 不重設狀態。
 
-1. `INITIAL`：目前 primary 確認需求；Terra 規劃/審查，啟用的 Luna 讀取/執行。
-2. `SOL_REPLAN_WITH_LUNA`：Sol 修訂企劃，Luna 修正，Terra 再審查。
-3. `SOL_PLAN_REVIEW_WITH_TERRA`：停用 Luna；Sol 規劃/審查，Terra 依計畫執行。
-4. `SOL_FULL_TAKEOVER`：停用 Terra 執行；Sol 規劃、讀取、實作、審查並完成。
+| Stage | 流程 | PLAN.md owner |
+| --- | --- | --- |
+| `INITIAL` | Primary 確認 → Luna 讀取/執行 → Terra 規劃/審查 | Current writable executor |
+| `SOL_REPLAN_WITH_LUNA` | Sol 修訂 → Luna 修正 → Terra 審查 | Luna |
+| `SOL_PLAN_REVIEW_WITH_TERRA` | 停用 Luna；Sol 規劃/審查 → Terra 執行 | Terra |
+| `SOL_FULL_TAKEOVER` | 停用 Terra；Sol 完成全部工作 | Sol |
 
-`PASS` 終止並由目前 primary 回覆；`EVIDENCE_GAP`/`REQUIREMENT_CLARIFICATION` 留在原 stage，不消耗執行次數。Primary Sol/Terra/Luna 分別不建立同模型 child；最多兩個 child，且不得在 Stage 4 重新啟用 executor。
+`PASS` 終止並由目前 primary 回覆；`EVIDENCE_GAP`/`REQUIREMENT_CLARIFICATION` 留在原 stage，不消耗執行次數。不得建立同模型 child，最多兩個 child，Stage 4 不重新啟用 executor。
 
-## 企劃檔生命週期
+### PLAN.md 生命週期
 
-企劃檔固定在 `<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md`；每個 workflow 只使用自己的目錄。
-
-- `INITIAL`：Terra 提供企劃，由目前可寫入的 executor 保存；Luna 為 primary 時由 primary Luna 保存，否則由 Luna child 保存。
-- `SOL_REPLAN_WITH_LUNA`：Sol 提供修訂，啟用的 Luna 保存並負責清理。
-- `SOL_PLAN_REVIEW_WITH_TERRA`：Sol 提供修訂，啟用的 Terra 保存並負責清理。
-- `SOL_FULL_TAKEOVER`：Sol 保存並清理。
-- 沒有可寫入角色時只保留 in-memory artifact，不宣稱已寫檔。
-
-只有目前可寫入的 executor 能原子寫入或更新 PLAN.md；reviewer 不寫檔。`PASS` 後由同一 cleanup owner 移除該 workflow 目錄。阻塞、恢復、替換與 primary switch 保留路徑、版本與 owner；清理失敗保存為 `cleanup-failed`。
+每個 workflow 只使用 `<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md`。只有 active writable executor 能原子寫入；reviewer 不寫檔。`PASS` 後由同一 owner 清理該目錄；阻塞、恢復、替換與 primary switch 保留 path、version、owner；清理失敗標記為 `cleanup-failed`。
 
 ## V2 行為
 

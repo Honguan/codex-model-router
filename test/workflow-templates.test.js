@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { LEGACY_TEMPLATES, TEMPLATES, WORKFLOW_PLAN_ARTIFACT_CONTRACT } from "../lib/manifest.js";
+import { LEGACY_TEMPLATES, TEMPLATES, WORKFLOW_LUNA_INTERACTION_CONTRACT, WORKFLOW_PLAN_ARTIFACT_CONTRACT } from "../lib/manifest.js";
 
 function activeSandboxAssignments(content) {
   return content.split(/\r?\n/)
@@ -9,12 +9,15 @@ function activeSandboxAssignments(content) {
     .map((line) => line.match(/^sandbox_mode\s*=\s*"([^"]+)"\s*$/)[1]);
 }
 
-test("Luna remains permanently gated by its task-scoped execution flag", () => {
+test("Luna authority is mode-gated and identity remains reusable", () => {
   assert.match(TEMPLATES.luna.content, /REQUIREMENT_EVIDENCE/);
   assert.match(TEMPLATES.luna.content, /one persistent Luna role/);
   assert.deepEqual(activeSandboxAssignments(TEMPLATES.luna.content), ["workspace-write"]);
   assert.match(TEMPLATES.luna.content, /luna_execution_enabled/);
-  assert.match(TEMPLATES.luna.content, /disabled Luna remains coord-only permanently/);
+  assert.match(TEMPLATES.luna.content, /ACTIVE_EXECUTOR/);
+  assert.match(TEMPLATES.luna.content, /INTERACTION_ONLY/);
+  assert.match(TEMPLATES.luna.content, /DETACHED/);
+  assert.match(TEMPLATES.luna.content, /runtime authority derives from `luna_mode`/);
   assert.match(TEMPLATES.luna.content, /Do not self-approve/);
 });
 
@@ -38,6 +41,7 @@ test("Sol is contract-gated read-only before full takeover", () => {
   assert.match(TEMPLATES.sol.content, /SOL_FULL_TAKEOVER/);
   assert.match(TEMPLATES.sol.content, /sol_full_takeover/);
   assert.match(TEMPLATES.sol.content, /read-only for planning and review before full takeover/);
+  assert.match(TEMPLATES.sol.content, /retain the same Luna identity as INTERACTION_ONLY/);
 });
 
 test("agent templates have one active workspace-write assignment without a read-only fallback comment", () => {
@@ -72,24 +76,50 @@ test("bilingual README workflow prose matches the universal diagrams", () => {
     assert.match(document, /SOL_FULL_TAKEOVER/);
     assert.match(document, /PLAN\.md/);
     assert.match(document, /cleanup-failed/);
+    assert.match(document, /INTERACTION_ONLY/);
+    assert.match(document, /luna_role_id/);
   }
 });
 
-test("all current templates carry the deterministic scoped plan-artifact contract", () => {
+test("the full plan contract is centralized and role prompts stay compact", () => {
   const contracts = [
-    ["terra", [/workflow_id/, /PLAN_ARTIFACT_PATH/, /CODEX_ROOT/, /do not write PLAN_PATH/]],
-    ["luna", [/same workflow_id/, /PLAN_ARTIFACT_PATH/, /active writable executor/, /in-memory artifact/]],
-    ["sol", [/same workflow_id/, /PLAN_ARTIFACT_PATH/, /complete revised plan content/, /do not write PLAN_PATH/]],
+    ["terra", [/workflow_id/, /PLAN_ARTIFACT_PATH/, /CODEX_ROOT/, /do not write PLAN_PATH/, /current stage, Luna mode/]],
+    ["luna", [/same workflow_id/, /PLAN_ARTIFACT_PATH/, /ACTIVE_EXECUTOR/, /INTERACTION_ONLY/, /current stage, Luna mode/]],
+    ["sol", [/same workflow_id/, /PLAN_ARTIFACT_PATH/, /complete revised plan content/, /do not write PLAN_PATH/, /current stage, Luna mode/]],
     ["skill", [/PLAN_ARTIFACT_PATH/, /model-router\/workflows\/<workflow_id>\/PLAN\.md/, /active writable executor/, /cleanup-failed/]],
-    ["planning", [/workflow_id/, /PLAN_ARTIFACT_PATH/, /CODEX_ROOT/, /source-tree path/]]
+    ["planning", [/workflow_id/, /PLAN_ARTIFACT_PATH/, /CODEX_ROOT/, /source-tree path/, /current stage, Luna mode/]]
   ];
 
   for (const [name, patterns] of contracts) {
     const content = TEMPLATES[name].content;
     for (const pattern of patterns) assert.match(content, pattern, `${name} missing ${pattern}`);
     assert.doesNotMatch(content, /workspace PLAN\.md|workspace\/PLAN\.md|workspace\\PLAN\.md/i);
+    if (name !== "skill") {
+      assert.doesNotMatch(content, /Workflow recovery \(declarative host contract/);
+      assert.doesNotMatch(content, /Workflow escalation \(declarative host contract/);
+      assert.doesNotMatch(content, /Plan artifact \(declarative host contract/);
+    }
   }
   assert.equal(WORKFLOW_PLAN_ARTIFACT_CONTRACT.path, "<CODEX_ROOT>/model-router/workflows/<workflow_id>/PLAN.md");
+});
+
+test("Luna action policy is canonical, disjoint, and has a bounded prompt surface", () => {
+  assert.deepEqual(WORKFLOW_LUNA_INTERACTION_CONTRACT.modes, ["ACTIVE_EXECUTOR", "INTERACTION_ONLY", "DETACHED"]);
+  assert.deepEqual(WORKFLOW_LUNA_INTERACTION_CONTRACT.modeByStage, {
+    INITIAL: "ACTIVE_EXECUTOR",
+    SOL_REPLAN_WITH_LUNA: "ACTIVE_EXECUTOR",
+    SOL_PLAN_REVIEW_WITH_TERRA: "INTERACTION_ONLY",
+    SOL_FULL_TAKEOVER: "INTERACTION_ONLY"
+  });
+  const categories = Object.values(WORKFLOW_LUNA_INTERACTION_CONTRACT.actionPolicy);
+  const allActions = categories.flat();
+  assert.equal(new Set(allActions).size, allActions.length);
+  assert.equal(WORKFLOW_LUNA_INTERACTION_CONTRACT.resultFields.includes("artifact_refs"), true);
+  assert.equal(WORKFLOW_LUNA_INTERACTION_CONTRACT.resultFields.includes("redactions"), true);
+  assert.ok(TEMPLATES.terra.content.length < 5000);
+  assert.ok(TEMPLATES.luna.content.length < 5000);
+  assert.ok(TEMPLATES.sol.content.length < 5000);
+  assert.ok(TEMPLATES.planning.content.length < 5000);
 });
 
 test("pre-change current templates remain recognized for safe migration", () => {

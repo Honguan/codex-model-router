@@ -141,8 +141,9 @@ flowchart TD
 
 - 同一個工作流程不重複啟動相同模型代理。
 - 主模型與代理角色相同時，由主線程直接完成該角色工作。
-- 寫入權由 stage 與 execution flags 控制；takeover 前的規劃/審查角色只回傳內容。
+- 寫入權由 stage 與 Luna mode 控制；`luna_execution_enabled` 僅供 migration，不能取代 mode。
 - Terra 規劃並獨立驗證；Sol 在非 `PASS` 後介入。
+- Luna 在同一 root session/workflow 保留同一個 `luna_role_id`；降級後以 `INTERACTION_ONLY` 執行受 stage 授權的 canonical action IDs。
 - 最終回覆一律回到主模型。
 
 ## 工作流程契約
@@ -153,7 +154,7 @@ flowchart TD
 
 - `RECOVERY_STATE_PATH=<ARTIFACT_DIR>/recovery-state.v1.json`；registry 的 `agents` 是角色 keyed object。
 - Host 提供 primary、executor 與最多兩個 child roles；超過兩個回報 `EVIDENCE_GAP`，不變更狀態。
-- 精確可恢復的 ID 直接 `reused`；只有 host 確認不可用且允許建立新實例時才替換，handoff 原樣保留。
+- 同一 workflow 的精確可恢復 Luna ID 即使降為 `INTERACTION_ONLY` 仍直接 `reused`；只有 host 確認不可用且允許建立新實例時才替換，handoff 原樣保留。新 workflow、root session 或 workspace 不沿用舊身份。
 - Primary thread 負責載入、保存與協調；active writable executor 負責 PLAN.md。寫入失敗時保留舊狀態，不發布 partial state。
 
 ### 升級流程
@@ -164,10 +165,20 @@ flowchart TD
 | --- | --- | --- |
 | `INITIAL` | Primary 確認 → Luna 讀取/執行 → Terra 規劃/審查 | Current writable executor |
 | `SOL_REPLAN_WITH_LUNA` | Sol 修訂 → Luna 修正 → Terra 審查 | Luna |
-| `SOL_PLAN_REVIEW_WITH_TERRA` | 停用 Luna；Sol 規劃/審查 → Terra 執行 | Terra |
-| `SOL_FULL_TAKEOVER` | 停用 Terra；Sol 完成全部工作 | Sol |
+| `SOL_PLAN_REVIEW_WITH_TERRA` | Luna 保留為 `INTERACTION_ONLY`；Sol 規劃/審查 → Terra 執行 | Terra |
+| `SOL_FULL_TAKEOVER` | Luna 保留為 `INTERACTION_ONLY`；停用 Terra 寫入；Sol 完成工作 | Sol |
 
-`PASS` 終止並由目前 primary 回覆；`EVIDENCE_GAP`/`REQUIREMENT_CLARIFICATION` 留在原 stage，不消耗執行次數。不得建立同模型 child，最多兩個 child，Stage 4 不重新啟用 executor。
+`PASS` 終止並由目前 primary 回覆；`EVIDENCE_GAP`/`REQUIREMENT_CLARIFICATION` 留在原 stage，不消耗執行次數。不得建立同模型 child，最多兩個 child；Stage 4 不重新啟用 source executor，但可保留 Luna interaction child。
+
+### Luna interaction mode
+
+| Mode | 權限 |
+| --- | --- |
+| `ACTIVE_EXECUTOR` | 依 stage 寫入 source／PLAN 並執行授權工作 |
+| `INTERACTION_ONLY` | 不寫 source／PLAN、不決策或自我核准，只執行 host 提供的 action IDs |
+| `DETACHED` | 不執行任何動作 |
+
+Interaction 結果需包含 action、command、cwd、exit code、摘要、evidence、artifact refs 與 redactions；大型輸出放在 artifact，敏感資料先遮罩。
 
 ### PLAN.md 生命週期
 
